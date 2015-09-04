@@ -1,0 +1,59 @@
+package com.birdseye.ticketing;
+
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.runner.JUnitCore;
+import org.junit.runner.Result;
+import org.junit.runner.RunWith;
+import org.junit.runner.notification.Failure;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.SpringApplicationConfiguration;
+import org.springframework.core.env.Environment;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.web.WebAppConfiguration;
+
+import com.birdseye.ticketing.api.Application;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@WebAppConfiguration
+@SpringApplicationConfiguration(classes = Application.class)
+public class BackendTicketingApplicationTests {
+	
+	@Autowired
+	private Environment environment;
+		
+
+	@Test
+	public void contextLoads() {
+		Boolean isSuccess=true;
+		CheckBasicSanity();
+		Result result = JUnitCore.runClasses(BookingControllerTest.class,CustomerControllerTest.class,PaymentControllerTest.class);
+		for (Failure failure : result.getFailures()) {
+			System.out.println("Failure result is: " + failure.toString());
+			isSuccess=false;
+		}	
+		if(isSuccess)
+		{
+			System.out.println("Unit Test Successful without any failures");
+		}
+		
+	}
+	
+	public void CheckBasicSanity()
+	{	
+		System.out.println("Doing Basic Sanity Test ");
+		Assert.assertNotNull(environment
+			.getProperty("customer.minimum.balance"));
+		Assert.assertNotNull(environment
+				.getProperty("notification.email.template"));
+		Assert.assertNotNull(environment
+				.getProperty("notification.email.admin.email-id"));
+		Assert.assertEquals("20",environment
+				.getProperty("customer.minimum.balance"));
+		Assert.assertEquals("/email_template.html",environment
+				.getProperty("notification.email.template"));
+		Assert.assertEquals("vaibhavc@birdseyetech.com",environment
+				.getProperty("notification.email.admin.email-id"));
+	}
+
+}

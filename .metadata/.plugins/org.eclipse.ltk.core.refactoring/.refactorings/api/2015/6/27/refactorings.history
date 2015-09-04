@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;api/src/main/java/com/birdseye/ticketing/api/dto/ticketReqDTO.java&apos; to &apos;TicketReqDTO.java&apos;" description="Rename resource &apos;ticketReqDTO.java&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="src/main/java/com/birdseye/ticketing/api/dto/ticketReqDTO.java" name="TicketReqDTO.java" stamp="1435563341938" updateReferences="true"/>
+</session>

@@ -1,0 +1,33 @@
+1436275017659	Encapsulate field 'value'
+1436333510506	Move compilation unit
+1436420813745	Rename type 'Agency'
+1436421187220	Change method 'setAgencyNo'
+1436426886643	Rename type 'AgencyAccount'
+1436426950493	Rename type 'AgencyAccount_old'
+1436431098868	Rename type 'Ticket'
+1436431129677	Rename type 'BookingTicket'
+1436431624014	Rename field 'ticketNo'
+1436432483568	Rename type 'Transaction'
+1436433046617	Rename type 'Journey'
+1436433900521	Delete element
+1436433908215	Delete element
+1436433935842	Delete element
+1436433941253	Delete element
+1436433958349	Delete element
+1436447929700	Rename type 'AgencyRepository'
+1436447976980	Rename type 'JourneyRepository'
+1436448007958	Rename type 'TicketRepository'
+1436448307188	Delete element
+1436448346224	Rename type 'AgencyAccountRepository'
+1436448982517	Rename compilation unit 'Delivery.java'
+1436449296494	Delete element
+1436506349271	Rename type 'AgencyAccountService'
+1436506501835	Rename compilation unit 'JourneyService.java'
+1436506533428	Rename type 'TicketService'
+1436506579876	Rename compilation unit 'AgencyAccountServiceImpl.java'
+1436507696735	Rename type 'AgencyServiceImpl'
+1436507777398	Rename type 'AgencyService'
+1436508065407	Rename type 'TicketSearchSpecificationImpl'
+1436508534173	Rename type 'TicketServiceImpl'
+1436521129833	Rename type 'TravellerType'
+1436531686009	Delete element

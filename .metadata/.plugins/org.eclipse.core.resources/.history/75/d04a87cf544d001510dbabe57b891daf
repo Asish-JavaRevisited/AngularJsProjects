@@ -1,0 +1,34 @@
+package com.birdseye.ticketing.core.util;
+
+import org.springframework.stereotype.Component;
+
+/**
+ * Description: This class is used to generate unique id based on input strings.
+ * 
+ * @author AsishS
+ *
+ */
+@Component
+public class UniqueIdGenerator {
+
+	private final static long uniqueKey = 1432967850;
+
+	/*
+	 * public String generateUniqueId_Old() { final String uuid =
+	 * UUID.randomUUID().toString().replaceAll("-", ""); return
+	 * uuid.substring(0, 16); }
+	 */
+
+	public String generateUniqueId(String var1, String var2) {
+		Long newVar = Long.parseLong(var1) + uniqueKey;
+		String reverse = new StringBuffer(var2).reverse().toString();
+		return new String(newVar.toString().substring(2,9).concat(reverse));
+	}
+
+	/*
+	 * public static void main(String args[]) { UniqueIdGenerator UidGen = new
+	 * UniqueIdGenerator();
+	 * System.out.println(UidGen.generateUniqueId("7798846880",
+	 * "	20150717194629")); }
+	 */
+}

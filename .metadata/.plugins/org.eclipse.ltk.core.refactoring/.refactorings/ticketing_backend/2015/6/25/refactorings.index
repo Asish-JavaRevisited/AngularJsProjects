@@ -1,0 +1,13 @@
+1434440373307	Delete elements
+1434440798558	Delete elements
+1434459807864	Rename package 'com.birdseye.ticketing.web'
+1434459825149	Rename package 'com.birdseye.ticketing.web.config'
+1434462256902	Delete elements
+1434618710818	Rename resource 'web'
+1434618739526	Move 3 resources to 'api'
+1434618746355	Delete element
+1434698795257	Delete element
+1434707647873	Rename type 'TicketService'
+1434707683673	Rename type 'TicketingServiceImpl'
+1434715697281	Rename resource 'WebConfig.java'
+1434715718895	Rename resource 'APIConfig.java'

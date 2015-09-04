@@ -1,0 +1,5 @@
+1437380925949	Rename type 'BookingPaymentDetails'
+1437383131912	Rename compilation unit 'CustomerPaymentGatewayRepository.java'
+1437383159826	Rename type 'PaymentGatewayFactory'
+1437460109456	Rename local variable 'sessionId'
+1437463727887	Convert local variable 'bookingJourneyId' to field

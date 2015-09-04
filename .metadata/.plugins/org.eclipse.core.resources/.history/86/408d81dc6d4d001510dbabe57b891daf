@@ -1,0 +1,27 @@
+package com.birdseye.ticketing.core.enums;
+
+public enum BookingType {
+	REGULAR_JOURNEY(1), PREBOOK(2), REBOOK(3);
+
+	private final int value;
+
+	private BookingType(int value) {
+		this.value = value;
+	}
+
+	/**
+	 * @return the value
+	 */
+	public int getValue() {
+		return value;
+	}
+
+	public static BookingType valueOf(int no) {
+		for (BookingType bookingType : values()) {
+			if (bookingType.value == no) {
+				return bookingType;
+			}
+		}
+		return null;
+	}
+}

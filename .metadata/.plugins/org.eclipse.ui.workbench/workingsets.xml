@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workingSetManager>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1432643368122_1" label="SpringJerseyGradle" name="SpringJerseyGradle"/>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1434348135075_2" label="backendTicket" name="backendTicket"/>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1434348669426_3" label="backendTicketing" name="backendTicketing"/>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1434371750733_4" label="ticketing_backend" name="ticketing_backend">
+<item elementID="=api" factoryID="org.eclipse.jdt.ui.PersistableJavaElementFactory"/>
+<item elementID="=core" factoryID="org.eclipse.jdt.ui.PersistableJavaElementFactory"/>
+<item elementID="=apps" factoryID="org.eclipse.jdt.ui.PersistableJavaElementFactory"/>
+</workingSet>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1434433136141_5" label="SpringJerseyGradle-master" name="SpringJerseyGradle-master">
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/SpringJerseyGradle-service" type="4"/>
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/SpringJerseyGradle-master" type="4"/>
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/SpringJerseyGradle-persistence" type="4"/>
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/SpringJerseyGradle-ws" type="4"/>
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/SpringJerseyGradle-security" type="4"/>
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/SpringJerseyGradle-web" type="4"/>
+</workingSet>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1434437450817_6" label="E-Commerce" name="E-Commerce">
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/ticketing_backend1" type="4"/>
+</workingSet>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1434712568120_7" label="ticketing_backend_Asish" name="ticketing_backend_Asish">
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/ticketing_backend_Asish" type="4"/>
+</workingSet>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1437490303105_8" label="demo" name="demo">
+<item factoryID="org.eclipse.ui.internal.model.ResourceFactory" path="/demo" type="4"/>
+</workingSet>
+<workingSet editPageId="org.eclipse.jdt.ui.JavaWorkingSetPage" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1440137437499_9" label="JUnitProject" name="JUnitProject">
+<item elementID="=JUnitProject" factoryID="org.eclipse.jdt.ui.PersistableJavaElementFactory"/>
+</workingSet>
+<workingSet aggregate="true" factoryID="org.eclipse.ui.internal.WorkingSetFactory" id="1432641658909_0" label="Window Working Set" name="Aggregate for window 1432641658909"/>
+</workingSetManager>

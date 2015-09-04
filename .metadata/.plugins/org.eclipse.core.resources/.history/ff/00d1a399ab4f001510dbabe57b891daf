@@ -1,0 +1,78 @@
+package com.birdseye.ticketing.api.util;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import jdk.net.SocketFlow.Status;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Component;
+
+import com.birdseye.ticketing.core.data.domain.AppSecCreds;
+import com.birdseye.ticketing.core.service.AppSecCredsService;
+import com.birdseye.ticketing.core.util.CryptoUtil;
+
+@Component
+public class ValidateApiKeyUtil {
+
+	@Autowired
+	AppSecCredsService appSecCredsService;
+
+	@Autowired
+	AppSecCreds appSecCreds;
+
+	@Autowired
+	CryptoUtil cryptoUtil;
+
+	final static Logger logger = Logger.getLogger(ValidateApiKeyUtil.class
+			.getName());
+
+	private final Map<String, AppSecCreds> appSecCredsMap = new ConcurrentHashMap<String, AppSecCreds>();
+	private final Map<String, String> paymentCacheMap = new ConcurrentHashMap<String, String>();
+	
+	@Cacheable("appSecCredsMap")
+	public Map<String, AppSecCreds> retrieveAppSecCred(String... appName) {
+		for (String str : appName) {
+			AppSecCreds appSecCreds = appSecCredsService.findByAppName(str);
+			if (!appSecCredsMap.containsKey(str)) {
+				appSecCredsMap.put(appSecCreds.getAppName(), appSecCreds);
+				logger.debug("Cashing is now enabled for" + str);
+				logger.info("Cashing is now enabled for " + str);
+			}
+		}
+
+		return appSecCredsMap;
+	}
+
+	/**
+	 * @param appSecCreds
+	 */
+	@CacheEvict(value = "appSecCreds", key = "appSecCredsMap.appName")
+	public void save(AppSecCreds appSecCreds) {
+		logger.info("Saving new Cashing");
+		appSecCredsMap.put(appSecCreds.getAppName(), appSecCreds);
+	}
+	
+	
+	
+	@Cacheable("PaymentCacheMap")
+	public Map<String, AppSecCreds> retrieveAppSecCred(String bookingNo) {
+					
+				paymentCacheMap.putIfAbsent(bookingNo, Status.IN_PROGRESS.toString());
+		return paymentCacheMap;
+	}
+
+	/*
+	 * 
+	 * public boolean validateApiKey(String appName,String apk_key) { if
+	 * (appSecCreds != null) { if
+	 * (!apk_key.equalsIgnoreCase(cryptoUtil.decryptString
+	 * (retrieveAppSecCred(appName).get(appName).getApiKey()))) { return false;
+	 * } } else return false;
+	 * 
+	 * return true; }
+	 */
+}

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename type &apos;com.birdseye.ticketing.core.enums.PaymentMethod&apos; to &apos;PaymentMethods&apos;&#x0D;&#x0A;- Original project: &apos;core&apos;&#x0D;&#x0A;- Original element: &apos;com.birdseye.ticketing.core.enums.PaymentMethod&apos;&#x0D;&#x0A;- Renamed element: &apos;com.birdseye.ticketing.core.enums.PaymentMethods&apos;&#x0D;&#x0A;- Update references to refactored element&#x0D;&#x0A;- Update textual occurrences in comments and strings" description="Rename type &apos;PaymentMethod&apos;" flags="589830" id="org.eclipse.jdt.ui.rename.type" input="/src\/main\/java&lt;com.birdseye.ticketing.core.enums{PaymentMethod.java[PaymentMethod" matchStrategy="1" name="PaymentMethods" qualified="false" references="true" similarDeclarations="false" stamp="1436805114992" textual="false" version="1.0"/>
+</session>

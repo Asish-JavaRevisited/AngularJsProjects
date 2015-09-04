@@ -1,0 +1,171 @@
+package com.birdseye.ticketing.api.controller;
+
+//import org.apache.logging.log4j.Logger;
+//import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.birdseye.ticketing.api.dto.ConductorSessionDTO;
+import com.birdseye.ticketing.api.util.ResponseBean;
+import com.birdseye.ticketing.core.data.domain.Company;
+import com.birdseye.ticketing.core.data.domain.Conductor;
+import com.birdseye.ticketing.core.data.domain.ConductorSession;
+import com.birdseye.ticketing.core.data.domain.Conveyance;
+import com.birdseye.ticketing.core.data.domain.Device;
+import com.birdseye.ticketing.core.data.domain.Route;
+import com.birdseye.ticketing.core.service.CompanyService;
+import com.birdseye.ticketing.core.service.ConductorService;
+import com.birdseye.ticketing.core.service.ConductorSessionService;
+import com.birdseye.ticketing.core.service.ConveyanceService;
+import com.birdseye.ticketing.core.service.DeviceService;
+import com.birdseye.ticketing.core.service.RouteService;
+import com.birdseye.ticketing.core.util.SessionIdGenerator;
+
+@RestController
+@RequestMapping("/api/session")
+public class SessionController {
+
+	@Autowired
+	ConductorSessionService ConductorSessionService;
+
+	@Autowired
+	ConductorService conductorService;
+
+	@Autowired
+	ConveyanceService conveyanceService;
+
+	@Autowired
+	CompanyService companyService;
+
+	@Autowired
+	RouteService routeService;
+
+	@Autowired
+	DeviceService deviceService;
+
+	@Autowired
+	ResponseBean responseBean;
+
+	@Autowired
+	SessionIdGenerator sessionIdGenerator;
+
+	@RequestMapping(value = { "/create" }, method = RequestMethod.POST)
+	public ResponseBean saveSession(
+			@RequestBody ConductorSessionDTO conductorSessionDTO) {
+
+		Company company;
+		Conveyance conveyance;
+		Route route;
+		Conductor conductor;
+		Device device;
+		ConductorSession conductorSession = new ConductorSession();
+		String sessionId;
+
+		if (conductorSessionDTO == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Invalid Request Information");
+		}
+		if (!validateDeviceId(conductorSessionDTO.getDeviceNo())) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"UnAuthorised Device. Not Allowed");
+		}
+
+		responseBean = requestValidation(conductorSessionDTO);
+
+		if (responseBean.getStatus().equals(HttpStatus.OK)) {
+
+			company = companyService.findByCompanyNo(conductorSessionDTO
+					.getCompanyNo());
+			if (company == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No such company Found");
+			}
+			conductorSession.setCompany(company);
+			conveyance = conveyanceService
+					.FindByConveyanceNoAndCompanyNoAndIsAc(
+							conductorSessionDTO.getConveyanceNo(),
+							conductorSessionDTO.getCompanyNo(),
+							conductorSessionDTO.getIsAC());
+			if (conveyance == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No such conveyance found !!");
+			}
+			conductorSession.setConveyance(conveyance);
+
+			route = routeService.FindByRouteNoAndCompanyNo(
+					conductorSessionDTO.getRouteNo(),
+					conductorSessionDTO.getCompanyNo());
+			if (route == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No such Route Found");
+			}
+			conductorSession.setRoute(route);
+			conductor = conductorService.FindByConductorNo(conductorSessionDTO
+					.getConductorNo());
+			if (conductor == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No such Conductor Found");
+			}
+			conductorSession.setConductor(conductor);
+			device = deviceService.FindByDeviceSrNoAndCompanyNo(
+					conductorSessionDTO.getDeviceNo(),
+					conductorSessionDTO.getCompanyNo());
+			if (device == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No such Device Found");
+			}
+			conductorSession.setDevice(device);
+			sessionId = sessionIdGenerator.generateSessionId(company
+					.getCompanyName());
+			System.out.println("Session id=" + sessionId);
+			conductorSession.setSessionId(sessionId);
+			ConductorSessionService.save(conductorSession);
+			return new ResponseBean(conductorSession.getSessionId(),
+					"Booking Successful");
+		}
+		return responseBean;
+
+	}
+
+	public boolean validateDeviceId(String deviceId) {
+		/* TODO :whitelisting check in future phase */
+		if (StringUtils.isEmpty(deviceId))
+			return false;
+		else
+			return true;
+	}
+
+	public ResponseBean requestValidation(
+			ConductorSessionDTO conductorSessionDTO) {
+		if (conductorSessionDTO.getRouteNo() == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Route No can't be null");
+		}
+
+		if (conductorSessionDTO.getCompanyNo() == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Company No can't be null");
+		}
+
+		if (conductorSessionDTO.getConveyanceNo() == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Conveyance No can't be null");
+		}
+
+		if (conductorSessionDTO.getConveyanceType() == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Conveyance type can't be null");
+		}
+		if (conductorSessionDTO.getIsAC() == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"AC/NON-AC info can't be null");
+		}
+		return new ResponseBean(HttpStatus.OK, "Validation Successful");
+	}
+
+}

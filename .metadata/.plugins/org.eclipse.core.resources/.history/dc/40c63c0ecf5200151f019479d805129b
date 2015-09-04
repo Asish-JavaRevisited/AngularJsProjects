@@ -1,0 +1,1800 @@
+package com.birdseye.ticketing.api.controller;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.validation.Valid;
+import javax.ws.rs.QueryParam;
+
+import org.apache.log4j.Logger;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.hibernate.TypeMismatchException;
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.core.env.Environment;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.util.StringUtils;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.birdseye.ticketing.api.dto.BookingHistory;
+import com.birdseye.ticketing.api.dto.BookingReqDTO;
+import com.birdseye.ticketing.api.dto.CustomerBalanceDTO;
+import com.birdseye.ticketing.api.dto.PaymentDTO;
+import com.birdseye.ticketing.api.dto.UserBookingReqDTO;
+import com.birdseye.ticketing.api.util.AuditLogUtil;
+import com.birdseye.ticketing.api.util.Notification;
+import com.birdseye.ticketing.api.util.ResponseBean;
+import com.birdseye.ticketing.api.util.ValidateApiKeyUtil;
+import com.birdseye.ticketing.core.data.domain.AppSecCreds;
+import com.birdseye.ticketing.core.data.domain.Booking;
+import com.birdseye.ticketing.core.data.domain.BookingJourney;
+import com.birdseye.ticketing.core.data.domain.BookingPaymentDetails;
+import com.birdseye.ticketing.core.data.domain.Company;
+import com.birdseye.ticketing.core.data.domain.ConductorSession;
+import com.birdseye.ticketing.core.data.domain.Currency;
+import com.birdseye.ticketing.core.data.domain.Customer;
+import com.birdseye.ticketing.core.data.domain.CustomerPaymentGateway;
+import com.birdseye.ticketing.core.data.domain.PaymentMethod;
+import com.birdseye.ticketing.core.data.repository.AppSecCredsRepository;
+import com.birdseye.ticketing.core.enums.BookingType;
+import com.birdseye.ticketing.core.enums.CryptoCode;
+import com.birdseye.ticketing.core.enums.PaginationDefaults;
+import com.birdseye.ticketing.core.enums.PaymentMethods;
+import com.birdseye.ticketing.core.enums.PgCode;
+import com.birdseye.ticketing.core.enums.Status;
+import com.birdseye.ticketing.core.enums.TransactionType;
+import com.birdseye.ticketing.core.pg.PgResponseEntity;
+import com.birdseye.ticketing.core.service.AppSecCredsService;
+import com.birdseye.ticketing.core.service.BookingService;
+import com.birdseye.ticketing.core.service.CompanyService;
+import com.birdseye.ticketing.core.service.ConductorSessionService;
+import com.birdseye.ticketing.core.service.CurrencyService;
+import com.birdseye.ticketing.core.service.CustomerPaymentGatewayService;
+import com.birdseye.ticketing.core.service.CustomerService;
+import com.birdseye.ticketing.core.service.PaymentGatewayService;
+import com.birdseye.ticketing.core.service.PaymentService;
+import com.birdseye.ticketing.core.util.CryptoUtil;
+import com.birdseye.ticketing.core.util.FilterDTO;
+import com.birdseye.ticketing.core.util.UniqueIdGenerator;
+
+/**
+ * Description: This class is for Booking Ticket API,Ticket History API and
+ * other processes involved with Booking.
+ * 
+ * @author Asish
+ *
+ */
+@RestController
+@EnableCaching
+@RequestMapping("/api/ticket")
+public class BookingController {
+
+	@Autowired
+	private BookingService bookingService;
+
+	@Autowired
+	private CustomerService customerService;
+
+	@Autowired
+	private ConductorSessionService conductorSessionService;
+
+	@Autowired
+	PaymentService paymentService;
+
+	@Autowired
+	private CurrencyService currencyService;
+
+	@Autowired
+	private CustomerPaymentGatewayService customerPaymentGatewayService;
+
+	@Autowired
+	UniqueIdGenerator uniqueId;
+
+	@Autowired
+	ResponseBean responseBean;
+
+	@Autowired
+	ResponseBean pgResponseBean;
+
+	@Autowired
+	PgResponseEntity pgResponseEntity;
+
+	@Autowired
+	PaymentController paymentController;
+
+	@Autowired
+	PaymentGatewayService paymentGatewayService;
+
+	@Autowired
+	CompanyService companyService;
+
+	@Autowired
+	private Environment environment;
+
+	@Autowired
+	AuditLogUtil auditLogUtil;
+
+	@Autowired
+	ValidateApiKeyUtil validateApiKeyUtil;
+
+	@Autowired
+	CryptoUtil cryptoUtil;
+
+	@Autowired
+	AppSecCreds appSecCreds;
+
+	@Autowired
+	private HttpServletRequest request;
+
+	@Autowired
+	AppSecCredsService appSecCredsService;
+
+	@Autowired
+	AppSecCredsRepository appSecCredsRepository;
+
+	@Autowired
+	Notification notification;
+
+	private ObjectMapper mapper = new ObjectMapper();
+
+	final static Logger logger = Logger.getLogger(BookingController.class
+			.getName());
+
+	private final Map<String, String> paymentCheckMap = new ConcurrentHashMap<String, String>();
+
+	/**
+	 * Description: This is the controller for Book Ticket API.
+	 * 
+	 * @param bookingDto
+	 * @return ResponseBean
+	 * @throws Exception
+	 * 
+	 */
+
+	@RequestMapping(value = { "/" }, method = RequestMethod.POST, produces = "application/json")
+	public @ResponseBody ResponseBean createBooking(
+			@RequestHeader(value = "apk_key", required = true) String apk_key,
+			@RequestBody @Valid BookingReqDTO bookingDto, BindingResult result)
+			throws Exception {
+
+		logger.debug("Inside CreateBooking Method");
+		/* request logging */
+		/* auditLogUtil.createAuditLog(bookingDto.toString(), request); */
+		auditLogUtil.createAuditLog(mapper.writeValueAsString(bookingDto),
+				request);
+
+		/* Authenticating the api_key */
+		if (!validateApiKey(CryptoCode.CONDUCTORAPP.toString(), apk_key)) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					" UnAthorised Access Identified for apk_key " + apk_key);
+		}
+		/* Request Validation. */
+		if (result != null && result.hasErrors()) {
+			logger.error("Failure: " + result.getFieldError().getField() + " "
+					+ result.getFieldError().getDefaultMessage());
+
+			return new ResponseBean(HttpStatus.BAD_REQUEST, result
+					.getFieldError().getField()
+					+ " "
+					+ result.getFieldError().getDefaultMessage());
+		}
+		if (!validateDeviceId(bookingDto.getDeviceId())) {
+			logger.debug("UnAuthorised Device found. Not Allowed");
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"UnAuthorised Device. Not Allowed");
+		}
+
+		BookingJourney bookingJourney = new BookingJourney();
+		BookingPaymentDetails bookingPaymentDetails = new BookingPaymentDetails();
+		List<BookingPaymentDetails> bookingPaymentDetailsList = new ArrayList<BookingPaymentDetails>();
+		Double total_amount = 0.0;
+		Booking booking = null;
+		String bookingToken = null;
+		Customer customer;
+		ConductorSession conductorSession;
+		PaymentMethod paymentMethod;
+		Company company;
+		Currency currency;
+		String pgCode;
+		Date bookingDate;
+		CustomerPaymentGateway customerPaymentGateway = new CustomerPaymentGateway();
+
+		Long customerId = Long.valueOf(bookingDto.getQrCode().getCustomerId());
+		// logger.info("Customer no is " + customerId);
+		logger.info("QRCode Details " + bookingDto.getQrCode().toString());
+		logger.info("TimeStamp : " + bookingDto.getQrCode().getTimeStamp()
+				+ " CustomerNo :" + bookingDto.getQrCode().getCustomerId()
+				+ " Booking Initiated by Conductor");
+
+		responseBean = requestValidation(customerId, bookingDto);
+		/*
+		 * On Hold for now. As Client wants to use credit points, so skips this
+		 * validation temporarily.
+		 */
+
+		/*
+		 * if (responseBean.getStatus().equals(HttpStatus.OK)) { responseBean =
+		 * verifyCustomerLastPayment(customerId); } else { return responseBean;
+		 * }
+		 */
+		if (!responseBean.getStatus().equals(HttpStatus.OK)) {
+			return responseBean;
+		}
+		try {
+			customer = customerService.findBycustomerId(customerId);
+			if (customer == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid customer found");
+			} else if (customer.getStatus() != null
+					&& customer.getStatus().equalsIgnoreCase(
+							Status.INACTIVE.toString())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Customer status is Inactive");
+			}
+			/* booking.setCustomer(customer); */
+
+			conductorSession = conductorSessionService
+					.findBySessionId(bookingDto.getSessionId());
+			if (conductorSession == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Session Id");
+			} else if (conductorSession.getStatus() != null
+					&& conductorSession.getStatus().equalsIgnoreCase(
+							Status.INACTIVE.toString())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Session status is Inactive");
+			} else if (conductorSession.getConductor().getStatus() != null
+					&& conductorSession.getConductor().getStatus()
+							.equalsIgnoreCase(Status.INACTIVE.toString())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Conductor status is Inactive");
+			}
+
+			bookingJourney.setConductorSession(conductorSession);
+
+			company = conductorSession.getCompany();
+			if ((company) == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Company found");
+			} else if (company.getStatus() != null
+					&& company.getStatus().equalsIgnoreCase(
+							Status.INACTIVE.toString())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Company status is Inactive");
+			}
+			/* booking.setCompany(company); */
+
+			if (conductorSession.getDevice().getStatus() != null
+					&& conductorSession.getDevice().getStatus()
+							.equalsIgnoreCase(Status.INACTIVE.toString())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Device status is Inactive");
+			}
+			currency = currencyService.findByCurrencyCode(bookingDto
+					.getCurrencyCode());
+
+			if (currency == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid currency found");
+			}
+			/* booking.setCurrency(currency); */
+
+			/* Payment Method set to Citrus */
+			paymentMethod = paymentService
+					.findByPaymentMethodCode(PaymentMethods.CTPG.toString());
+			PaymentDTO paymentDTO = new PaymentDTO();
+
+			/*
+			 * Formating TimeStamp
+			 */
+			SimpleDateFormat outputDateFormat = new SimpleDateFormat(
+					"yyyy-MM-dd HH:mm:ss");
+			Long unixTime = Long.valueOf(bookingDto.getQrCode().getTimeStamp()) / 1000L;
+			java.util.Date time = new java.util.Date((long) unixTime * 1000);
+			bookingDate = outputDateFormat.parse(outputDateFormat.format(time));
+
+			/*
+			 * Calcualating total amount based on Additional Calling Payment
+			 * Module to initiate the payment.
+			 */
+			total_amount = calculateTotalAmount(bookingDto.getActual_amount(),
+					bookingDto.getAdditional_amount(),
+					bookingDto.getDiscount_amount());
+			if (total_amount != null && total_amount > 0) {
+				paymentDTO.setAmount(total_amount);
+			} else {
+				logger.debug("Total amount requested i.e. " + total_amount
+						+ " must be greater than zero.");
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Total amount requested i.e. " + total_amount
+								+ " must be greater than zero.");
+			}
+			paymentDTO.setStatus(1);
+			paymentDTO.setCheckSum(null);
+			String comment = "Payment of " + total_amount
+					+ " is Initiated for Customer " + customerId;
+			paymentDTO.setComment(comment);
+			paymentDTO.setCurrency(currency.getCurrencyCode());
+			paymentDTO.setCustomerNo(customerId);
+
+			customerPaymentGateway = customerPaymentGatewayService
+					.findByCustomerNoAndIsDefaultPgCode(customerId, 1);
+			if (customerPaymentGateway == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No Default Payment Gateway Found");
+			}
+			pgCode = customerPaymentGateway.getPaymentGateway().getPgCode();
+
+			if (pgCode != null) {
+				logger.info("TimeStamp : "
+						+ bookingDto.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ bookingDto.getQrCode().getCustomerId()
+						+ " pgCode is " + pgCode);
+				if (PgCode.valueOf(pgCode) != null) {
+					paymentDTO.setPgCode(PgCode.valueOf(pgCode));
+				} else {
+					return new ResponseBean(HttpStatus.BAD_REQUEST,
+							"Customer Payment Gateway is not acceptable");
+				}
+			}
+			bookingToken = uniqueId.generateUniqueId(bookingDto.getQrCode()
+					.getCustomerId(), bookingDto.getQrCode().getTimeStamp());
+
+			if (bookingToken == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Booking No could not be generated");
+			}
+			logger.debug("Booking No is: " + bookingToken);
+			logger.info("Booking No is: " + bookingToken);
+
+			if (!paymentCheckMap.containsKey(bookingToken)) {
+				logger.info("TimeStamp : "
+						+ bookingDto.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ bookingDto.getQrCode().getCustomerId()
+						+ " Updating Map for booking Token");
+				paymentCheckMap.put(bookingToken, Status.INPROGRESS.toString());
+			} else {
+				logger.info("TimeStamp : "
+						+ bookingDto.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ bookingDto.getQrCode().getCustomerId()
+						+ " Could  not update Map for booking Token, Concurrent request found");
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Concurrent request found.Cann't proceed");
+			}
+
+			/* booking.setBookingNo(bookingToken); */
+
+			bookingJourney.setNoOfAdults(bookingDto.getNoOfAdults());
+			bookingJourney.setNoOfChildren(bookingDto.getNoOfChildren());
+			bookingJourney.setSource(bookingDto.getSource());
+			bookingJourney.setDestination(bookingDto.getDestination());
+			bookingJourney.setQrCode(bookingDto.getQrCode().getCustomerId()
+					.concat(bookingDto.getQrCode().getTimeStamp()));
+			bookingJourney.setStatus(Status.ACTIVE.toString());
+
+			List<BookingPaymentDetails> bookingPaymentDetailsPrev = new ArrayList<BookingPaymentDetails>();
+			bookingPaymentDetailsPrev = bookingService
+					.FindBookingPaymentDetailsByBookingNo(bookingToken);
+
+			booking = bookingService.findByBookingNo(bookingToken);
+			/*
+			 * Handling user Booking in case Conductor tries to book again after
+			 * user has already booked.
+			 */
+			if (booking != null) {
+				if (Status.BOOKING_BY_USER.toString().equalsIgnoreCase(
+						booking.getStatus())) {
+					logger.debug("Successful booking already exists.No further update allowed");
+					return new ResponseBean(HttpStatus.OK,
+							"Successful booking already exists.No further update allowed");
+				}
+				bookingPaymentDetailsPrev = booking
+						.getBookingPaymentDetailsList();
+				if (bookingPaymentDetailsPrev.size() > 0) {
+					logger.info("TimeStamp : "
+							+ bookingDto.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ bookingDto.getQrCode().getCustomerId()
+							+ " Previous booking found");
+					for (BookingPaymentDetails bookingPayDetails : bookingPaymentDetailsPrev) {
+						if ((TransactionType.PAYMENT.toString()
+								.equalsIgnoreCase(bookingPayDetails
+										.getTransactionType()))
+								&& (Status.USER_SUCCESS.toString()
+										.equals(bookingPayDetails.getStatus()))) {
+							if (booking.getTotal_amount() != total_amount) {
+								booking.setStatus(Status.BOOKING_BY_USER
+										.toString());
+								/*
+								 * Updating the Unpaid amount. Incase amount
+								 * from conductor app is greater than total
+								 * amount set for booking, Booking Unpaid amount
+								 * needs to be updated with the remaining
+								 * amount.
+								 */
+								if (total_amount > booking.getTotal_amount()) {
+									booking.setUnPaidAmount(total_amount
+											- booking.getTotal_amount());
+								} else {
+									booking.setUnPaidAmount(0.0);
+								}
+								booking.setTotal_amount(total_amount);
+							}
+
+							if (booking.getBookingJourney() == null) {
+								logger.info("TimeStamp : "
+										+ bookingDto.getQrCode().getTimeStamp()
+										+ " CustomerNo :"
+										+ bookingDto.getQrCode()
+												.getCustomerId()
+										+ " Updating booking Journey");
+								booking.setBookingJourney(bookingJourney);
+								bookingJourney.setBooking(booking);
+							}
+							/*
+							 * Removing the entry from map, so that another thread can access it.
+							 */
+							paymentCheckMap.remove(bookingToken,
+									Status.INPROGRESS.toString());
+							bookingService.save(booking);
+							return new ResponseBean(HttpStatus.OK,
+									"Booking Update Successful");
+						} else if ((TransactionType.PAYMENT.toString()
+								.equalsIgnoreCase(bookingPayDetails
+										.getTransactionType()))
+								&& (Status.SUCCESS.toString()
+										.equals(bookingPayDetails.getStatus()))) {
+							pgResponseEntity.setAmountPaid(0);
+							pgResponseEntity.setAmountUnpaid(0);
+							pgResponseEntity.setBalance(0);
+							pgResponseEntity.setStatus(Status.SUCCESSFUL
+									.toString());
+							pgResponseEntity.setBookingNo(bookingToken);
+							pgResponseEntity.setCurrency(booking.getCurrency()
+									.getCurrencyCode());
+							pgResponseEntity.setCustomerNo(bookingDto
+									.getQrCode().getCustomerId());
+							pgResponseEntity.setDate(booking
+									.getBookingDateTime().toString());
+							pgResponseEntity
+									.setPgTransactionId(bookingPayDetails
+											.getTransactionRefId());
+							pgResponseEntity.setReasonStatus(null);
+							pgResponseEntity.setErrorMessage(null);
+							pgResponseEntity.setErrorType(null);
+
+							/*
+							 * return new ResponseBean(HttpStatus.BAD_REQUEST,
+							 * "Successful Booking already done.No further booking allowed"
+							 * );
+							 */
+
+							logger.info("TimeStamp : "
+									+ bookingDto.getQrCode().getTimeStamp()
+									+ " CustomerNo :"
+									+ bookingDto.getQrCode().getCustomerId()
+									+ " Successful booking already exists.No further booking allowed");
+							/*
+							 * Removing the entry from map, so that another thread can access it.
+							 */
+							paymentCheckMap.remove(bookingToken,
+									Status.INPROGRESS.toString());
+							return new ResponseBean(pgResponseEntity,
+									"Booking and payment already Successful");
+
+							/*
+							 * return new ResponseBean(HttpStatus.OK,
+							 * "Successful booking already exists.No further booking allowed"
+							 * );
+							 */
+						} else {
+							logger.debug("Initiating Payment for failure transaction");
+							logger.info("TimeStamp : "
+									+ bookingDto.getQrCode().getTimeStamp()
+									+ " CustomerNo :"
+									+ bookingDto.getQrCode().getCustomerId()
+									+ " Initiating Payment for failure transaction");
+						}
+					}
+				}
+			} else {
+				booking = new Booking();
+			}
+			booking.setCustomer(customer);
+			booking.setCompany(company);
+			booking.setCurrency(currency);
+			booking.setBookingNo(bookingToken);
+
+			if (booking.getBookingJourney() == null) {
+				booking.setBookingJourney(bookingJourney);
+				bookingJourney.setBooking(booking);
+			}
+
+			booking.setTotal_amount(total_amount);
+			booking.setActual_amount(bookingDto.getActual_amount());
+			booking.setAdditional_amount(bookingDto.getAdditional_amount());
+			booking.setDiscount_amount(bookingDto.getDiscount_amount());
+			booking.setUnPaidAmount(total_amount);
+			booking.setStatus(Status.INPROGRESS.toString());
+			booking.setBookingDateTime(bookingDate);
+
+			BookingType bookingType = BookingType.valueOf(Integer
+					.valueOf(bookingDto.getBookingType()));
+			logger.info("TimeStamp : " + bookingDto.getQrCode().getTimeStamp()
+					+ " CustomerNo :" + bookingDto.getQrCode().getCustomerId()
+					+ " BookingType is: " + bookingType.name().toString());
+			booking.setBookingType(bookingType.name().toString());
+			/*
+			 * Saving booking Entity before calling Payment Module
+			 */
+			try {
+				/*
+				 * A redundant check though but Implemented as advised by
+				 * BirdsEye Team. It will ensure a check before saving.
+				 */
+				if (bookingService.findByBookingNo(bookingToken) == null) {
+					bookingService.save(booking);
+				}
+			} catch (DataIntegrityViolationException e) {
+				logger.info("TimeStamp : "
+						+ bookingDto.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ bookingDto.getQrCode().getCustomerId() + " "
+						+ HttpStatus.CONFLICT.toString()
+						+ " Concurrent booking request found");
+				logger.error(e);
+				return new ResponseBean(HttpStatus.CONFLICT,
+						"Concurrent booking request found");
+
+			}
+
+			/*
+			 * Setting Booking Token in PaymentDTO.
+			 */
+			paymentDTO.setBookingNo(bookingToken);
+
+			/*
+			 * Calling MakePayment to initiate payment.
+			 */
+
+			logger.info("TimeStamp : " + bookingDto.getQrCode().getTimeStamp()
+					+ " CustomerNo :" + bookingDto.getQrCode().getCustomerId()
+					+ " BookingDTO is " + paymentDTO.toString());
+
+			if (paymentCheckMap.containsKey(bookingToken)) {
+				if (Status.INPROGRESS.toString().equalsIgnoreCase(
+						booking.getStatus())) {
+					logger.info("TimeStamp : "
+							+ bookingDto.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ bookingDto.getQrCode().getCustomerId()
+							+ " calling Payment Module");
+					pgResponseBean = paymentController.MakePayment(paymentDTO);
+					paymentCheckMap.remove(bookingToken,
+							Status.INPROGRESS.toString());
+				} else {
+					return new ResponseBean(HttpStatus.BAD_REQUEST,
+							"Payment flow could not be initiated.Concurrent Access Found");
+				}
+			} else {
+				logger.info("TimeStamp : "
+						+ bookingDto.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ bookingDto.getQrCode().getCustomerId()
+						+ " Could not call Payment");
+			}
+			if (pgResponseBean.getStatus() != null) {
+				logger.info("TimeStamp : "
+						+ bookingDto.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ bookingDto.getQrCode().getCustomerId()
+						+ " Payment Details from PG is "
+						+ ((PgResponseEntity) pgResponseBean.getStatus())
+								.toString());
+			}
+
+			bookingPaymentDetails.setCurrency(currency);
+			bookingPaymentDetails.setPaymentMethod(paymentMethod);
+
+			pgResponseEntity = (PgResponseEntity) pgResponseBean.getStatus();
+
+			if (pgResponseEntity != null) {
+				if (Status.SUCCESSFUL.toString().equalsIgnoreCase(
+						pgResponseEntity.getStatus())) {
+					logger.info("TimeStamp : "
+							+ bookingDto.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ bookingDto.getQrCode().getCustomerId()
+							+ " SUCCESSFUL");
+					bookingPaymentDetails.setPaymentAmount(pgResponseEntity
+							.getAmountPaid());
+					bookingPaymentDetails.setStatus(Status.SUCCESS.toString());
+					bookingPaymentDetails.setTransactionRefId(pgResponseEntity
+							.getPgTransactionId());
+
+				} else if (Status.FAILED.toString().equalsIgnoreCase(
+						pgResponseEntity.getStatus())) {
+					logger.info("TimeStamp : "
+							+ bookingDto.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ bookingDto.getQrCode().getCustomerId()
+							+ " FAILURE");
+					bookingPaymentDetails.setStatus(Status.FAILURE.toString());
+					bookingPaymentDetails.setTransactionRefId(pgResponseEntity
+							.getPgTransactionId());
+					bookingPaymentDetails.setPaymentAmount(total_amount);
+				} else {
+					logger.info("TimeStamp : "
+							+ bookingDto.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ bookingDto.getQrCode().getCustomerId()
+							+ " FAILURE, Sending Notification to Admin ");
+					notification.sendSimpleNotifications(pgCode
+							+ ", PaymentGateway is not reachable for customer:"
+							+ paymentDTO.getCustomerNo() + " with email-id as "
+							+ customer.getEmail() + " . Need to fix");
+					bookingPaymentDetails.setStatus(Status.FAILURE.toString());
+					bookingPaymentDetails.setTransactionRefId(null);
+					bookingPaymentDetails.setPaymentAmount(total_amount);
+					pgResponseEntity
+							.setReasonStatus("PaymentGateway is not reachable.");
+				}
+			}
+
+			bookingPaymentDetails.setTransactionType(TransactionType.PAYMENT
+					.toString());
+			bookingPaymentDetailsList.add(bookingPaymentDetails);
+
+			booking.setBookingPaymentDetailsList(bookingPaymentDetailsList);
+
+			/* booking.setCustomer(customer); */
+
+			/*
+			 * booking.setTotal_amount(total_amount);
+			 * booking.setActual_amount(bookingDto.getActual_amount());
+			 * booking.setAdditional_amount(bookingDto.getAdditional_amount());
+			 * booking.setDiscount_amount(bookingDto.getDiscount_amount());
+			 */
+			String status = Status.FAILURE.toString();
+			for (BookingPaymentDetails bookingPaymentDetailsInfo : bookingPaymentDetailsList) {
+				if (Status.SUCCESS.toString().equalsIgnoreCase(
+						bookingPaymentDetailsInfo.getStatus())) {
+					status = Status.SUCCESS.toString();
+				}
+			}
+			if (Status.SUCCESS.toString().equalsIgnoreCase(status)) {
+				booking.setStatus(Status.SUCCESS.toString());
+				booking.setUnPaidAmount(0.0);
+			} else {
+				booking.setStatus(Status.OPEN.toString());
+				booking.setUnPaidAmount(bookingPaymentDetails
+						.getPaymentAmount());
+			}
+
+			bookingService.save(booking);
+
+		} catch (DataIntegrityViolationException e) {
+			throw new DataIntegrityViolationException(
+					"Duplicate QRCode Found.Need to fix", e);
+		} catch (ParseException e) {
+			logger.error("Invalid timestamp.");
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Invalid timestamp.");
+		} catch (NumberFormatException e) {
+			logger.error("Invalid timestamp.");
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Invalid timestamp.");
+		} catch (Exception e) {
+			throw new Exception("Exception Found.", e);
+		}
+
+		if (bookingPaymentDetails.getStatus().equalsIgnoreCase(
+				Status.SUCCESS.toString())) {
+			logger.debug("Booking with Payment Successful");
+			logger.info("TimeStamp : " + bookingDto.getQrCode().getTimeStamp()
+					+ " CustomerNo :" + bookingDto.getQrCode().getCustomerId()
+					+ " Booking with Payment Successful");
+			try {
+				notification.sendNotifications(pgResponseEntity);
+			} catch (Exception e) {
+				logger.error("Notification can't be sent", e);
+			}
+			return new ResponseBean(pgResponseEntity,
+					"Booking with Payment Successful");
+		} else {
+			pgResponseEntity.setBookingNo(bookingToken);
+			logger.debug("Payment Not yet Done.");
+			logger.info("TimeStamp : " + bookingDto.getQrCode().getTimeStamp()
+					+ " CustomerNo :" + bookingDto.getQrCode().getCustomerId()
+					+ " Payment Not yet Done.");
+			return new ResponseBean(pgResponseEntity, "Payment Not yet Done.");
+		}
+
+		/*
+		 * On Hold for now. As Client wants to use credit points, so skips this
+		 * validation
+		 */
+		/*
+		 * return new ResponseBean(HttpStatus.OK,
+		 * "Failure !! Last Payment not successful.");
+		 */
+
+	}
+
+	@RequestMapping(value = { "/user/booking" }, method = RequestMethod.POST, produces = "application/json")
+	public @ResponseBody ResponseBean createUserBooking(
+			@RequestHeader(value = "apk_key", required = true) String apk_key,
+			@RequestBody @Valid UserBookingReqDTO userBookingReqDTO,
+			BindingResult result) throws Exception {
+
+		logger.debug("createUserBooking Method");
+
+		/* request logging for post */
+		/* auditLogUtil.createAuditLog(userBookingReqDTO.toString(), request); */
+		auditLogUtil.createAuditLog(
+				mapper.writeValueAsString(userBookingReqDTO), request);
+
+		/* Authenticating the api_key */
+		if (!validateApiKey(CryptoCode.RIDLRAPP.toString(), apk_key)) {
+			logger.error("UnAthorised Access Identified for apk_key");
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					" UnAthorised Access Identified for apk_key " + apk_key);
+		}
+		/* Request Validation. */
+		if (result != null && result.hasErrors()) {
+			logger.error("Failure: " + result.getFieldError().getField() + " "
+					+ result.getFieldError().getDefaultMessage());
+
+			return new ResponseBean(HttpStatus.BAD_REQUEST, result
+					.getFieldError().getField()
+					+ " "
+					+ result.getFieldError().getDefaultMessage());
+		}
+		BookingPaymentDetails bookingPaymentDetails = new BookingPaymentDetails();
+		List<BookingPaymentDetails> bookingPaymentDetailsList = new ArrayList<BookingPaymentDetails>();
+		CustomerPaymentGateway customerPaymentGateway = new CustomerPaymentGateway();
+		Booking booking = null;
+		String bookingToken = null;
+		Customer customer;
+		PaymentMethod paymentMethod;
+		Company company;
+		Date bookingDate;
+		Long customerId = Long.valueOf(userBookingReqDTO.getQrCode()
+				.getCustomerId());
+		Currency currency;
+		Double total_amount = 0.0;
+		try {
+
+			logger.info("TimeStamp : "
+					+ userBookingReqDTO.getQrCode().getTimeStamp()
+					+ " CustomerNo :"
+					+ userBookingReqDTO.getQrCode().getCustomerId()
+					+ " Booking Initiated by User");
+
+			responseBean = UserRequestValidation(customerId, userBookingReqDTO);
+
+			if (!responseBean.getStatus().equals(HttpStatus.OK)) {
+				return responseBean;
+			}
+			logger.info("QRCode Details "
+					+ userBookingReqDTO.getQrCode().toString());
+			BookingType bookingType = BookingType.valueOf(Integer
+					.valueOf(userBookingReqDTO.getBookingType()));
+			if (bookingType == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No Such Booking Type found");
+			}
+			logger.info("TimeStamp : "
+					+ userBookingReqDTO.getQrCode().getTimeStamp()
+					+ " CustomerNo :"
+					+ userBookingReqDTO.getQrCode().getCustomerId()
+					+ " BookingType is: " + bookingType.name().toString());
+
+			/*
+			 * Formating TimeStamp
+			 */
+			SimpleDateFormat outputDateFormat = new SimpleDateFormat(
+					"yyyy-MM-dd HH:mm:ss");
+			Long unixTime = Long.valueOf(userBookingReqDTO.getQrCode()
+					.getTimeStamp()) / 1000L;
+			java.util.Date time = new java.util.Date((long) unixTime * 1000);
+
+			bookingDate = outputDateFormat.parse(outputDateFormat.format(time));
+
+			bookingToken = uniqueId.generateUniqueId(userBookingReqDTO
+					.getQrCode().getCustomerId(), userBookingReqDTO.getQrCode()
+					.getTimeStamp());
+
+			logger.info("TimeStamp : "
+					+ userBookingReqDTO.getQrCode().getTimeStamp()
+					+ " CustomerNo :"
+					+ userBookingReqDTO.getQrCode().getCustomerId()
+					+ " Booking Token :" + bookingToken);
+
+			logger.debug("Booking Token :" + bookingToken);
+			if (bookingToken == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Booking No could not be generated");
+			}
+
+			if (!paymentCheckMap.containsKey(bookingToken)) {
+				logger.info("TimeStamp : "
+						+ userBookingReqDTO.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ userBookingReqDTO.getQrCode().getCustomerId()
+						+ " Updating Map for booking Token");
+				paymentCheckMap.put(bookingToken, Status.INPROGRESS.toString());
+			} else {
+				logger.info("TimeStamp : "
+						+ userBookingReqDTO.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ userBookingReqDTO.getQrCode().getCustomerId() + " "
+						+ HttpStatus.CONFLICT.toString()
+						+ " Concurrent booking request found");
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Concurrent request found.Cann't proceed");
+			}
+
+			booking = bookingService.findByBookingNo(bookingToken);
+
+			if (booking != null) {
+				bookingPaymentDetailsList = booking
+						.getBookingPaymentDetailsList();
+				if (bookingPaymentDetailsList.size() > 0) {
+					for (BookingPaymentDetails bookingPayDetails : bookingPaymentDetailsList) {
+						if ((TransactionType.PAYMENT.toString()
+								.equalsIgnoreCase(bookingPayDetails
+										.getTransactionType()))
+								&& (Status.SUCCESS.toString().equals(
+										bookingPayDetails.getStatus()) || Status.USER_SUCCESS
+										.toString().equals(
+												bookingPayDetails.getStatus()))) {
+							pgResponseEntity.setAmountPaid(0);
+							pgResponseEntity.setAmountUnpaid(0);
+							pgResponseEntity.setBalance(0);
+							pgResponseEntity.setStatus(Status.SUCCESSFUL
+									.toString());
+							pgResponseEntity.setBookingNo(bookingToken);
+							pgResponseEntity.setCurrency(booking.getCurrency()
+									.getCurrencyCode());
+							pgResponseEntity.setCustomerNo(userBookingReqDTO
+									.getQrCode().getCustomerId());
+							pgResponseEntity.setDate(booking
+									.getBookingDateTime().toString());
+							pgResponseEntity
+									.setPgTransactionId(bookingPayDetails
+											.getTransactionRefId());
+							pgResponseEntity.setReasonStatus(null);
+							pgResponseEntity.setErrorMessage(null);
+							pgResponseEntity.setErrorType(null);
+							/*
+							 * return new ResponseBean(HttpStatus.BAD_REQUEST,
+							 * "Successful Booking already done.No further booking allowed"
+							 * );
+							 */
+							logger.info("TimeStamp : "
+									+ userBookingReqDTO.getQrCode()
+											.getTimeStamp()
+									+ " CustomerNo :"
+									+ userBookingReqDTO.getQrCode()
+											.getCustomerId()
+									+ " Booking and payment already Successful");
+							/*
+							 * Removing the entry from map, so that another thread can access it.
+							 */
+							paymentCheckMap.remove(bookingToken,
+									Status.INPROGRESS.toString());
+							return new ResponseBean(pgResponseEntity,
+									"Booking and payment already Successful");
+						}
+					}
+				}
+				/*
+				 * In order to avoid tampering of data, Setting values to the
+				 * correct values from original booking
+				 */
+				userBookingReqDTO.setActual_amount(booking.getActual_amount());
+				userBookingReqDTO.setAdditional_amount(booking
+						.getAdditional_amount());
+				userBookingReqDTO.setDiscount_amount(booking
+						.getDiscount_amount());
+				userBookingReqDTO.setCompanyNo(booking.getCompany()
+						.getCompanyNo());
+				userBookingReqDTO.setCurrencyCode(booking.getCurrency()
+						.getCurrencyCode());
+				/*
+				 * return new ResponseBean(HttpStatus.BAD_REQUEST,
+				 * "Booking done but not Successful.Please Contact Assistant");
+				 */
+			} else {
+				booking = new Booking();
+			}
+			total_amount = calculateTotalAmount(
+					userBookingReqDTO.getActual_amount(),
+					userBookingReqDTO.getAdditional_amount(),
+					userBookingReqDTO.getDiscount_amount());
+
+			booking.setBookingNo(bookingToken);
+
+			logger.info("TimeStamp : "
+					+ userBookingReqDTO.getQrCode().getTimeStamp()
+					+ " CustomerNo :"
+					+ userBookingReqDTO.getQrCode().getCustomerId()
+					+ " userBookingReqDTO is: " + userBookingReqDTO.toString());
+			booking.setTotal_amount(total_amount);
+			booking.setActual_amount(userBookingReqDTO.getActual_amount());
+			booking.setAdditional_amount(userBookingReqDTO
+					.getAdditional_amount());
+			booking.setDiscount_amount(userBookingReqDTO.getDiscount_amount());
+			booking.setUnPaidAmount(total_amount);
+			booking.setStatus(Status.USER_INPROGRESS.toString());
+			booking.setBookingType(bookingType.name().toString());
+			customerId = Long.valueOf(userBookingReqDTO.getQrCode()
+					.getCustomerId());
+
+			customer = customerService.findBycustomerId(customerId);
+			if (customer == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Customer not found");
+			} else if (customer.getStatus() != null
+					&& customer.getStatus().equalsIgnoreCase(
+							Status.INACTIVE.toString())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Customer status is Inactive");
+			}
+			booking.setCustomer(customer);
+
+			/*
+			 * if (userBookingReqDTO.getQrCode().getTimeStamp() == null) {
+			 * return new ResponseBean(HttpStatus.BAD_REQUEST,
+			 * "Invalid Booking Date"); }
+			 */
+
+			/*
+			 * conductorSession = conductorSessionService
+			 * .findBySessionId(bookingDto.getSessionId());
+			 */
+			/*
+			 * if (userBookingReqDTO.getCompanyNo() == null) { return new
+			 * ResponseBean(HttpStatus.BAD_REQUEST, "Invalid Company no found");
+			 * }
+			 */
+			company = companyService.findByCompanyNo(userBookingReqDTO
+					.getCompanyNo());
+			if (company == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid company no Found");
+			} else if (Status.INACTIVE.toString().equalsIgnoreCase(
+					company.getStatus())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"company status is Inactive");
+			}
+			booking.setCompany(company);
+
+			/* Payment Method set to Citrus */
+			paymentMethod = paymentService
+					.findByPaymentMethodCode(PaymentMethods.CTPG.toString());
+
+			if (userBookingReqDTO.getCurrencyCode() == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Currency found");
+			}
+			currency = currencyService.findByCurrencyCode(userBookingReqDTO
+					.getCurrencyCode());
+
+			if (currency == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid currency found");
+			}
+			booking.setCurrency(currency);
+
+			/* booking.setBookingType(BookingType.ONE_TIME_JOURNEY.toString()); */
+			PaymentDTO paymentDTO = new PaymentDTO();
+
+			/*
+			 * Setting PaymentDTO to initiate the payment.
+			 */
+			if (total_amount != null && total_amount > 0) {
+				paymentDTO.setAmount(total_amount);
+			} else {
+				logger.debug("Total amount requested i.e. " + total_amount
+						+ " must be greater than zero.");
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Total amount requested i.e. " + total_amount
+								+ " must be greater than zero.");
+
+			}
+			paymentDTO.setStatus(1); // 1=Active
+			paymentDTO.setCheckSum(null); // will be handled from Payment flow.
+			String comment = "Payment of " + total_amount
+					+ " is Initiated for Customer " + customerId;
+			paymentDTO.setComment(comment);
+			paymentDTO.setCurrency(currency.getCurrencyCode());
+			paymentDTO.setCustomerNo(customerId);
+
+			customerPaymentGateway = customerPaymentGatewayService
+					.findByCustomerNoAndIsDefaultPgCode(customerId, 1); // 1=default,0=Not
+																		// default
+			if (customerPaymentGateway == null) {
+				logger.debug("No Default Payment Gateway Found");
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No Default Payment Gateway Found");
+			}
+			String pgCode = customerPaymentGateway.getPaymentGateway()
+					.getPgCode();
+
+			if (pgCode != null) {
+				logger.info("TimeStamp : "
+						+ userBookingReqDTO.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ userBookingReqDTO.getQrCode().getCustomerId()
+						+ " pgCode is " + pgCode);
+				if (PgCode.valueOf(pgCode) != null) {
+					paymentDTO.setPgCode(PgCode.valueOf(pgCode));
+				} else {
+					return new ResponseBean(HttpStatus.BAD_REQUEST,
+							"Customer Payment Gateway is not acceptable");
+				}
+			} else {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Customer Payment Gateway not found");
+			}
+			paymentDTO.setBookingNo(bookingToken);
+
+			/*
+			 * Saving booking Entity before calling Payment Module
+			 */
+			try {
+				/*
+				 * A redundant check though but Implemented as advised by
+				 * BirdsEye Team.
+				 */
+				if (bookingService.findByBookingNo(bookingToken) == null) {
+					bookingService.save(booking);
+				}
+
+			} catch (DataIntegrityViolationException e) {
+				logger.info("TimeStamp : "
+						+ userBookingReqDTO.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ userBookingReqDTO.getQrCode().getCustomerId() + " "
+						+ HttpStatus.CONFLICT.toString()
+						+ " Concurrent booking request found");
+				return new ResponseBean(HttpStatus.CONFLICT,
+						"Concurrent booking request found");
+			}
+
+			/*
+			 * Calling MakePayment to initiate payment.
+			 */
+
+			logger.info("TimeStamp : "
+					+ userBookingReqDTO.getQrCode().getTimeStamp()
+					+ " CustomerNo :"
+					+ userBookingReqDTO.getQrCode().getCustomerId()
+					+ " userBookingReqDTO is " + paymentDTO.toString());
+
+			if (paymentCheckMap.containsKey(bookingToken)) {
+				logger.info("TimeStamp : "
+						+ userBookingReqDTO.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ userBookingReqDTO.getQrCode().getCustomerId()
+						+ " calling Payment Module");
+				if (Status.USER_INPROGRESS.toString().equalsIgnoreCase(
+						booking.getStatus())) {
+					pgResponseBean = paymentController.MakePayment(paymentDTO);
+					/*
+					 * Removing the entry from map, so that another thread can access it.
+					 */
+					paymentCheckMap.remove(bookingToken,
+							Status.INPROGRESS.toString());
+				} else {
+					return new ResponseBean(HttpStatus.BAD_REQUEST,
+							"Payment flow could not be initiated.Concurrent Access Found");
+				}
+			} else {
+				logger.info("TimeStamp : "
+						+ userBookingReqDTO.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ userBookingReqDTO.getQrCode().getCustomerId()
+						+ " Could not call Payment");
+			}
+
+			if (pgResponseBean.getStatus() != null) {
+				logger.info("TimeStamp : "
+						+ userBookingReqDTO.getQrCode().getTimeStamp()
+						+ " CustomerNo :"
+						+ userBookingReqDTO.getQrCode().getCustomerId()
+						+ " Payment Details from PG is "
+						+ ((PgResponseEntity) pgResponseBean.getStatus())
+								.toString());
+			}
+
+			bookingPaymentDetails.setCurrency(currency);
+			bookingPaymentDetails.setPaymentMethod(paymentMethod);
+
+			pgResponseEntity = (PgResponseEntity) pgResponseBean.getStatus();
+			if (pgResponseEntity != null) {
+				if (Status.SUCCESSFUL.toString().equalsIgnoreCase(
+						pgResponseEntity.getStatus())) {
+					logger.info("TimeStamp : "
+							+ userBookingReqDTO.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ userBookingReqDTO.getQrCode().getCustomerId()
+							+ " USER_SUCCESS ");
+					bookingPaymentDetails.setStatus(Status.USER_SUCCESS
+							.toString());
+					bookingPaymentDetails.setTransactionRefId(pgResponseEntity
+							.getPgTransactionId());
+					bookingPaymentDetails.setPaymentAmount(pgResponseEntity
+							.getAmountPaid());
+				} else if (Status.FAILED.toString().equalsIgnoreCase(
+						pgResponseEntity.getStatus())) {
+					logger.info("TimeStamp : "
+							+ userBookingReqDTO.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ userBookingReqDTO.getQrCode().getCustomerId()
+							+ " USER_FAILURE ");
+					bookingPaymentDetails.setStatus(Status.USER_FAILURE
+							.toString());
+					bookingPaymentDetails.setTransactionRefId(pgResponseEntity
+							.getPgTransactionId());
+					bookingPaymentDetails.setPaymentAmount(total_amount);
+				} else {
+					logger.info("TimeStamp : "
+							+ userBookingReqDTO.getQrCode().getTimeStamp()
+							+ " CustomerNo :"
+							+ userBookingReqDTO.getQrCode().getCustomerId()
+							+ " Sending Notification to Admin,USER_FAILURE ");
+					notification.sendSimpleNotifications(pgCode
+							+ ", PaymentGateway is not reachable for customer:"
+							+ paymentDTO.getCustomerNo() + " with email-id as "
+							+ customer.getEmail() + " . Need to fix");
+					bookingPaymentDetails.setStatus(Status.USER_FAILURE
+							.toString());
+					bookingPaymentDetails.setTransactionRefId(null);
+					bookingPaymentDetails.setPaymentAmount(total_amount);
+					pgResponseEntity
+							.setReasonStatus("PaymentGateway is not reachable.");
+				}
+			}
+			bookingPaymentDetails.setTransactionType(TransactionType.PAYMENT
+					.toString());
+			bookingPaymentDetailsList.add(bookingPaymentDetails);
+
+			booking.setBookingPaymentDetailsList(bookingPaymentDetailsList);
+			if (Status.USER_SUCCESS.toString().equalsIgnoreCase(
+					bookingPaymentDetails.getStatus())) {
+				booking.setStatus(Status.USER_SUCCESS.toString());
+				booking.setUnPaidAmount(0.0);
+				pgResponseEntity.setAmountUnpaid(booking.getUnPaidAmount());
+			} else {
+				booking.setStatus(Status.USER_OPEN.toString());
+				booking.setUnPaidAmount(bookingPaymentDetails
+						.getPaymentAmount());
+				pgResponseEntity.setAmountUnpaid(booking.getUnPaidAmount());
+				pgResponseEntity.setAmountPaid(0);
+			}
+			booking.setBookingDateTime(bookingDate);
+			
+				bookingService.save(booking);			
+
+		} catch (DataIntegrityViolationException e) {
+			throw new DataIntegrityViolationException(
+					"Duplicate QRCode Found.", e);
+		} catch (ParseException e) {
+			logger.error("Invalid timestamp.");
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Invalid timestamp.");
+		} catch (NumberFormatException e) {
+			logger.error("Invalid timestamp.");
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Invalid timestamp.");
+		} catch (Exception e) {
+			throw new Exception("Exception Found.", e);
+		}
+		if (bookingPaymentDetails.getStatus().equalsIgnoreCase(
+				Status.USER_SUCCESS.toString())) {
+			try {
+				notification.sendNotifications(pgResponseEntity);
+			} catch (Exception e) {
+				logger.error("Notification can't be sent", e);
+			}
+			logger.debug("Booking with Payment Successful");
+			logger.info("TimeStamp : "
+					+ userBookingReqDTO.getQrCode().getTimeStamp()
+					+ " CustomerNo :"
+					+ userBookingReqDTO.getQrCode().getCustomerId()
+					+ " Booking with Payment Successful");
+			return new ResponseBean(pgResponseEntity,
+					"Booking with Payment Successful");
+
+		} else {
+			pgResponseEntity.setBookingNo(bookingToken);
+			logger.debug("Payment Not yet Done.");
+			logger.info("TimeStamp : "
+					+ userBookingReqDTO.getQrCode().getTimeStamp()
+					+ " CustomerNo :"
+					+ userBookingReqDTO.getQrCode().getCustomerId()
+					+ " Payment Not yet Done.");
+			return new ResponseBean(pgResponseEntity, "Payment Not yet Done.");
+		}
+	}
+
+	/**
+	 * Description:This is used to verify if last payment of customer is
+	 * successful or not. A basic validation that will be done before booking
+	 * tickets. Scope: Currently not in use. It's for future scope.
+	 * 
+	 * @param customerId
+	 * @return ResponseBean
+	 * 
+	 */
+	// @RequestMapping(value = { "/verifyCustomerLastPayment/{id}" }, method =
+	// RequestMethod.GET, produces = "application/json; charset=utf-8")
+	public ResponseBean verifyCustomerLastPayment(
+			@PathVariable("id") Long customerId) throws Exception {
+		Booking booking;
+		String status = null;
+		/* request logging */
+		/* auditLogUtil.createAuditLog(request.getQueryString(), request); */
+		auditLogUtil.createAuditLog(
+				mapper.writeValueAsString(request.getQueryString()), request);
+		try {
+			booking = bookingService
+					.findFirstByCustomerIdOrderByCreatedDateDesc(customerId);
+		} catch (NullPointerException e) {
+			return new ResponseBean(HttpStatus.OK, "CUSTOMER RECORD NOT FOUND");
+		}
+
+		if (booking == null) {
+			return new ResponseBean(HttpStatus.OK, "CUSTOMER RECORD NOT FOUND");
+		}
+
+		if (booking.getBookingPaymentDetailsList() == null) {
+			return new ResponseBean(HttpStatus.OK, "CUSTOMER RECORD NOT FOUND");
+		} else {
+			for (BookingPaymentDetails bookings : booking
+					.getBookingPaymentDetailsList()) {
+				if (bookings.getTransactionType().equalsIgnoreCase(
+						TransactionType.PAYMENT.toString()))
+					status = bookings.getStatus();
+			}
+
+			if (status.equalsIgnoreCase(Status.FAILURE.toString())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"LAST PAYMENT UNSUCCESSFUL");
+			} else {
+				return new ResponseBean(HttpStatus.OK,
+						"LAST PAYMENT SUCCESSFUL");
+			}
+		}
+	}
+
+	/**
+	 * Description: This method is used to identify total available balance of
+	 * customer,last payment amount,minimum balance and total unpaid amount.
+	 * 
+	 * @param customerNo
+	 * @param pgCode
+	 * @return
+	 * @throws Exception
+	 */
+	@RequestMapping(value = { "/checkBalance" }, method = RequestMethod.POST, produces = "application/json")
+	public @ResponseBody ResponseBean checkBalance(
+			@RequestHeader(value = "apk_key", required = true) String apk_key,
+			@QueryParam(value = "CustomerNo") Long customerNo,
+			@QueryParam(value = "pgCode") String pgCode) throws Exception {
+
+		logger.debug("Inside checkBalance Method");
+
+		/* request logging for GET */
+		/* auditLogUtil.createAuditLog(request.getQueryString(), request); */
+		auditLogUtil.createAuditLog(
+				mapper.writeValueAsString(request.getQueryString()), request);
+
+		if ((!validateApiKey(CryptoCode.CONDUCTORAPP.toString(), apk_key))
+				&& (!validateApiKey(CryptoCode.RIDLRAPP.toString(), apk_key))) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					" UnAthorised Access Identified for apk_key " + apk_key);
+		}
+		Booking booking;
+		PaymentDTO paymentDTO = new PaymentDTO();
+		CustomerBalanceDTO customerBalanceDTO = new CustomerBalanceDTO();
+		Double lastTransactionAmount = null;
+
+		if (customerNo == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Invalid Customer No ");
+		}
+
+		if (pgCode == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST, "Invalid pgCode");
+		}
+
+		Customer customer = customerService.findBycustomerId(customerNo);
+		if (customer == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Customer not found");
+		}
+
+		if ((paymentGatewayService.findByPgCode(pgCode)) == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"PaymentGateway not found");
+		}
+
+		booking = bookingService
+				.findFirstByCustomerIdOrderByCreatedDateDesc(customerNo);
+
+		if (booking == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"No Booking Found for this Customer");
+		}
+		for (BookingPaymentDetails bookings : booking
+				.getBookingPaymentDetailsList()) {
+			if (bookings.getTransactionType().equalsIgnoreCase(
+					TransactionType.PAYMENT.toString()))
+				lastTransactionAmount = bookings.getPaymentAmount();
+		}
+
+		customerBalanceDTO.setLastTransactionAmount(lastTransactionAmount
+				.toString());
+		customerBalanceDTO
+				.setUnpaidAmount(booking.getUnPaidAmount().toString());
+
+		String minbalance = environment.getProperty("customer.minimum.balance");
+		if (minbalance != null) {
+			customerBalanceDTO.setMinbalance(minbalance);
+		} else {
+			customerBalanceDTO.setMinbalance(null);
+		}
+		paymentDTO.setCustomerNo(customerNo);
+		paymentDTO.setPgCode(PgCode.valueOf(pgCode));
+
+		/*
+		 * checkUserBalance method is used to get UserBalance from gateway.
+		 */
+
+		responseBean = paymentController.checkUserBalance(paymentDTO);
+
+		pgResponseEntity = (PgResponseEntity) responseBean.getStatus();
+
+		logger.info("pgResponseEntity is: " + pgResponseEntity.toString());
+		if (pgResponseEntity != null) {
+			if ((pgResponseEntity.getErrorType() == null)) {
+				customerBalanceDTO.setCustomerWalletBalance(String
+						.valueOf(pgResponseEntity.getBalance()));
+				customerBalanceDTO.setCurrency(pgResponseEntity.getCurrency());
+				responseBean.setStatus(customerBalanceDTO);
+				responseBean.setMessage("Successfull");
+			} else {
+				responseBean.setStatus(HttpStatus.BAD_REQUEST);
+				responseBean.setMessage("Balance Retreival Failure !");
+			}
+		} else {
+			responseBean.setStatus(HttpStatus.BAD_REQUEST);
+			responseBean.setMessage("Balance Retreival Failure !");
+		}
+
+		return responseBean;
+	}
+
+	/**
+	 * Description: This method will be used to validate device in order to
+	 * confirm if the call is from genuine source or not. In phase-1, its out of
+	 * scope.
+	 * 
+	 * @param deviceId
+	 * @return boolean
+	 */
+	public boolean validateDeviceId(String deviceId) {
+		/* TODO :whitelisting check in future phase */
+		if (StringUtils.isEmpty(deviceId))
+			return false;
+		else
+			return true;
+	}
+
+	/**
+	 * Description: This method is used for basic validation of input request
+	 * parameters.
+	 * 
+	 * @param customerId
+	 * @param bookingReqDto
+	 * @return ResponseBean
+	 */
+	public ResponseBean requestValidation(Long customerId,
+			BookingReqDTO bookingReqDto) {
+		/*
+		 * if (bookingJourneyService.FindByQrCode(bookingReqDto.getQrCode()) !=
+		 * null) { return new ResponseBean(HttpStatus.BAD_REQUEST,
+		 * "Duplicate QRCode"); }
+		 */
+		try {
+			if (bookingReqDto.getQrCode().getCustomerId() == null
+					|| bookingReqDto.getQrCode().getCustomerId().isEmpty()) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid CustomerId");
+			}
+			if (bookingReqDto.getQrCode().getTimeStamp() == null
+					|| bookingReqDto.getQrCode().getTimeStamp().isEmpty()) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid TimeStamp");
+			}
+
+			/* actual_amount Validation */
+			if (bookingReqDto.getActual_amount() == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid actual_amount");
+			}
+
+			if (bookingReqDto.getActual_amount() < 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid actual_amount");
+			}
+
+			/* Additional_amount Validation */
+			if (bookingReqDto.getAdditional_amount() == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Additional_amount");
+			}
+
+			if (bookingReqDto.getAdditional_amount() < 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Additional_amount");
+			}
+
+			/* Discount Validation */
+			if (bookingReqDto.getDiscount_amount() == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Discount_amount");
+			}
+
+			if (bookingReqDto.getDiscount_amount() < 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Discount_amount");
+			}
+
+			/*
+			 * Atleast one customer must travel. So it's a validation check.
+			 */
+			if (bookingReqDto.getNoOfAdults() == 0
+					&& bookingReqDto.getNoOfChildren() == 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Atleast one passenger must travel");
+			}
+			/*
+			 * if(!isInEnum(bookingReqDto.getBookingType(), BookingType.class))
+			 * return new ResponseBean(HttpStatus.BAD_REQUEST,
+			 * "Wrong Booking Type");
+			 */
+
+			BookingType bookingType = BookingType.valueOf(Integer
+					.valueOf(bookingReqDto.getBookingType()));
+			if (bookingType == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No Such Booking Type found");
+			}
+		} catch (NumberFormatException e) {
+			throw new HttpMessageNotReadableException(
+					"Invalid input format found.");
+		} catch (HttpMessageNotReadableException e) {
+			throw new HttpMessageNotReadableException(
+					"Invalid input format found.");
+		}
+
+		return new ResponseBean(HttpStatus.OK, "Validation Check successful");
+	}
+
+	/**
+	 * Description: This method is used for basic validation of user input
+	 * request parameters.
+	 * 
+	 * @param customerId
+	 * @param userBookingReqDTO
+	 * @return
+	 */
+	public ResponseBean UserRequestValidation(Long customerId,
+			UserBookingReqDTO userBookingReqDTO) {
+		try {
+			if (userBookingReqDTO.getQrCode().getCustomerId() == null
+					|| userBookingReqDTO.getQrCode().getCustomerId().isEmpty()) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid CustomerId");
+			}
+
+			if (userBookingReqDTO.getQrCode().getTimeStamp() == null
+					|| userBookingReqDTO.getQrCode().getTimeStamp().isEmpty()) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid TimeStamp");
+			}
+
+			/* actual_amount Validation */
+			if (userBookingReqDTO.getActual_amount() == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid actual_amount");
+			}
+
+			if (userBookingReqDTO.getActual_amount() < 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid actual_amount");
+			}
+
+			/* Additional_amount Validation */
+			if (userBookingReqDTO.getAdditional_amount() == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Additional_amount");
+			}
+
+			if (userBookingReqDTO.getAdditional_amount() < 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Additional_amount");
+			}
+
+			/* Discount Validation */
+			if (userBookingReqDTO.getDiscount_amount() == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Discount_amount");
+			}
+
+			if (userBookingReqDTO.getDiscount_amount() < 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Discount_amount");
+			}
+
+			/* Validation of Device, Future Scope */
+			if (!validateDeviceId(userBookingReqDTO.getDeviceId())) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"UnAuthorised Device. Not Allowed");
+			}
+		} catch (NumberFormatException e) {
+			throw new HttpMessageNotReadableException(
+					"Invalid input format found.");
+		} catch (HttpMessageNotReadableException e) {
+			throw new HttpMessageNotReadableException(
+					"Invalid input format found.");
+		}
+		return new ResponseBean(HttpStatus.OK, "Validation Check successful");
+	}
+
+	/**
+	 * Description: This method is used to retrieve history of all the tickets
+	 * booked based on the input parameters which are the filters for the
+	 * result.
+	 * 
+	 * @param companyNo
+	 * @param customerNo
+	 * @param sessionId
+	 * @param fromDate
+	 * @param toDate
+	 * @param offset
+	 * @param limit
+	 * @return ResponseBean
+	 * @throws Exception
+	 */
+
+	@RequestMapping(value = { "/{companyNo}" }, method = RequestMethod.GET, produces = "application/json")
+	public ResponseBean tickets(
+			@RequestHeader(value = "apk_key", required = true) String apk_key,
+			@PathVariable("companyNo") String companyNo,
+			@QueryParam("customerNo") Long customerNo,
+			@QueryParam("conductorNo") String conductorNo,
+			@QueryParam("sessionId") String sessionId,
+			@QueryParam("fromDate") String fromDate,
+			@QueryParam("toDate") String toDate,
+			@QueryParam("offset") Integer offset,
+			@QueryParam("getAmount") Integer getAmount,
+			@QueryParam("limit") Integer limit) throws Exception {
+		logger.debug("Inside GetHistory Call, Tickets Method");
+		/* request logging for GET */
+		/* auditLogUtil.createAuditLog(request.getQueryString(), request); */
+
+		auditLogUtil.createAuditLog(
+				mapper.writeValueAsString(request.getQueryString()), request);
+
+		if (!validateApiKey(CryptoCode.CONDUCTORAPP.toString(), apk_key)) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					" UnAthorised Access Identified for apk_key " + apk_key);
+		}
+		/*
+		 * SimpleDateFormat inputDateFormat = new SimpleDateFormat(
+		 * "yyyy-MM-dd HH:mm:ss");
+		 */
+		SimpleDateFormat outputDateFormat = new SimpleDateFormat(
+				"yyyy-MM-dd HH:mm:ss");
+
+		String parsedDate = null;
+		List<Booking> bookings = new ArrayList<>();
+		BookingHistory companyHistory;
+		FilterDTO filterDTO = new FilterDTO();
+
+		try {
+			if (companyNo != null) {
+				filterDTO.setCompanyNo(companyNo);
+			} else {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Company No Not found");
+			}
+
+			if (sessionId != null && !sessionId.isEmpty()) {
+				filterDTO.setSessionId(sessionId);
+			}
+
+			filterDTO.setCustomerNo(customerNo);
+			
+			filterDTO.setConductorNo(conductorNo);
+			/*
+			 * if (customerNo != null) { filterDTO.setCustomerNo(customerNo);
+			 * }else { logger.debug("Customer is null");
+			 * filterDTO.setCustomerNo(null); }
+			 */
+
+			if (fromDate != null && !fromDate.isEmpty()) {
+				/*
+				 * parsedDate = inputDateFormat.format(inputDateFormat
+				 * .parse(fromDate.toString()));
+				 */
+				parsedDate = parseDate(fromDate.toString(),
+						"yyyy-MM-dd HH:mm:ss");
+				filterDTO.setFromDate(parsedDate);
+			}
+
+			if (toDate != null && !toDate.isEmpty()) {
+				parsedDate = parseDate(toDate.toString(), "yyyy-MM-dd HH:mm:ss");
+				filterDTO.setToDate(parsedDate);
+			}
+			if (offset != null) {
+				filterDTO.setOffset(offset);
+			} else {
+				logger.debug("Setting Offset as default ");
+				offset = PaginationDefaults.DEFAULT_OFFSET.getValue();
+				filterDTO.setOffset(offset);
+			}
+
+			if (limit != null) {
+				filterDTO.setLimit(limit);
+			} else {
+				logger.debug("Setting limit as default ");
+				limit = PaginationDefaults.DEFAULT_LIMIT.getValue();
+				filterDTO.setLimit(limit);
+			}
+
+			if (getAmount != null && getAmount == 1) {
+				filterDTO.setGetAmount(getAmount);
+			} else {
+				filterDTO.setGetAmount(0);
+			}
+			logger.debug("Filter condition is: " + filterDTO.toString());
+			logger.info("Filter condition is: " + filterDTO.toString());
+
+			bookings = bookingService.searchBookings(filterDTO);
+
+			if (bookings == null)
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"No Result Found");
+		} catch (TypeMismatchException e) {
+			throw new TypeMismatchException("Invalid input format found");
+		} catch (NumberFormatException e) {
+			throw new HttpMessageNotReadableException(
+					"Invalid input format found.");
+		}
+		List<BookingHistory> bookingList = new ArrayList<BookingHistory>();
+		Double sumOfAmount = 0.0;
+		for (Booking booking : bookings) {
+			companyHistory = new BookingHistory();
+			if (booking.getBookingJourney() != null) {
+				companyHistory.setBusNo(booking.getBookingJourney()
+						.getConductorSession().getConveyance()
+						.getConveyanceNo());
+				companyHistory.setDestination(booking.getBookingJourney()
+						.getDestination());
+				companyHistory.setSource(booking.getBookingJourney()
+						.getSource());
+				companyHistory.setNumAdults(booking.getBookingJourney()
+						.getNoOfAdults());
+				companyHistory.setNumChildren(booking.getBookingJourney()
+						.getNoOfChildren());
+				companyHistory.setSessionId(booking.getBookingJourney().getConductorSession().getSessionId());
+			} else {
+				companyHistory.setBusNo("Info not available");
+				companyHistory.setDestination("Info not available");
+				companyHistory.setSource("Info not available");
+				companyHistory.setNumAdults(0);
+				companyHistory.setNumChildren(0);
+				companyHistory.setSessionId("Info not available");
+			}
+			companyHistory.setCustomerNo(booking.getCustomer().getCustomerNo());
+			parsedDate = outputDateFormat.format(booking.getCreatedDate());
+			companyHistory.setDate(parsedDate);
+			if (booking.getTotal_amount() != null) {
+				companyHistory.setFare(booking.getTotal_amount());
+				sumOfAmount = sumOfAmount + booking.getTotal_amount();
+			} else {
+				companyHistory.setFare(0.0);
+			}
+			bookingList.add(companyHistory);
+		}
+		JSONArray response = new JSONArray();
+		if (getAmount != null && getAmount == 1) {
+			JSONObject obj = new JSONObject();
+			obj.put("TotalAmount", sumOfAmount);
+			response.add(obj);
+		} else {
+			response.add(bookingList);
+		}
+		if (bookingList.size() > 0)
+			return new ResponseBean(response, "History Retrieval Successful");
+		else
+			return new ResponseBean(response, "No Result Found");
+	}
+
+	public String parseDate(String date, String format) throws ParseException {
+
+		SimpleDateFormat inputDateFormat = new SimpleDateFormat(format);
+		String parsedDate = inputDateFormat.format(inputDateFormat.parse(date));
+		return parsedDate;
+
+		/*
+		 * Logic for handling UnixTimeStamp. SimpleDateFormat outputDateFormat =
+		 * new SimpleDateFormat(format); Long unixTime = Long.valueOf(date) /
+		 * 1000L; java.util.Date time = new java.util.Date((long) unixTime *
+		 * 1000); return outputDateFormat.format(time);
+		 */
+	}
+
+	public Date convertStringToDate(String date, String timeStampformat)
+			throws ParseException {
+		SimpleDateFormat outputDateFormat = new SimpleDateFormat(
+				timeStampformat); // "yyyy-MM-dd HH:mm:ss"
+		return outputDateFormat.parse(date);
+	}
+
+	public boolean validateApiKey(String appName, String apk_key) {
+		logger.info();
+		Map<String, AppSecCreds> appSecCredsMap = new ConcurrentHashMap<String, AppSecCreds>();
+		appSecCredsMap = validateApiKeyUtil.retrieveAppSecCred(appName);
+		if (appSecCreds != null) {
+			if (!apk_key.equalsIgnoreCase(cryptoUtil
+					.decryptString(appSecCredsMap.get(appName).getApiKey()))) {
+				return false;
+			}
+		} else
+			return false;
+		return true;
+	}
+
+	public Double calculateTotalAmount(Double actualAmount,
+			Double additionalAmount, Double discountAmount) {
+		return actualAmount + additionalAmount - discountAmount;
+	}
+
+	public <E extends Enum<E>> boolean isInEnum(String value, Class<E> enumClass) {
+		for (E e : enumClass.getEnumConstants()) {
+			if (e.name().equals(value)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+}

@@ -1,8 +1,5 @@
 package org.gradle;
 
-import java.util.Arrays;
-
-import org.hamcrest.core.CombinableMatcher;
 import org.junit.Test;
 
 public class AssertTests {

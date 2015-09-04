@@ -1,0 +1,15 @@
+spring.datasource.url=jdbc:mysql://localhost:3306/ticketing2
+spring.datasource.username=root
+spring.datasource.password=password123
+spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+
+spring.jpa.hibernate.ddl-auto = update
+
+database.driver=com.mysql.jdbc.Driver
+database.url=jdbc:mysql://localhost:3306/ticketing2
+database.username=root
+database.password=password123
+spring.jpa.hibernate.show_sql=true
+customer.minimum.balance=20
+notification.email.template=/email_template.html
+notification.email.admin.email-id=asish.sahoo@talentica.com

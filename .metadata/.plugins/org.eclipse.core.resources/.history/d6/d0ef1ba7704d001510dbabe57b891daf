@@ -1,0 +1,453 @@
+package com.birdseye.ticketing.api.controller;
+
+import java.io.IOException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Predicate;
+import javax.persistence.criteria.Root;
+import javax.servlet.http.HttpServletRequest;
+import javax.validation.Valid;
+
+import org.apache.log4j.Logger;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.json.simple.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.birdseye.ticketing.api.dto.CustomerDTO;
+import com.birdseye.ticketing.api.util.AuditLogUtil;
+import com.birdseye.ticketing.api.util.ResponseBean;
+import com.birdseye.ticketing.api.util.ValidateApiKeyUtil;
+import com.birdseye.ticketing.core.data.domain.AppSecCreds;
+import com.birdseye.ticketing.core.data.domain.Booking;
+import com.birdseye.ticketing.core.data.domain.Customer;
+import com.birdseye.ticketing.core.data.domain.CustomerPaymentGateway;
+import com.birdseye.ticketing.core.data.domain.PaymentGateway;
+import com.birdseye.ticketing.core.data.repository.BookingRepository;
+import com.birdseye.ticketing.core.enums.BookingType;
+import com.birdseye.ticketing.core.enums.CryptoCode;
+import com.birdseye.ticketing.core.enums.CustomerProperties;
+import com.birdseye.ticketing.core.enums.Status;
+import com.birdseye.ticketing.core.service.CustomerPaymentGatewayService;
+import com.birdseye.ticketing.core.service.CustomerService;
+import com.birdseye.ticketing.core.service.PaymentGatewayService;
+import com.birdseye.ticketing.core.util.CryptoUtil;
+
+/**
+ * Description: This controller classed is used for Saving/updating customer.
+ * 
+ * @author Asish
+ *
+ */
+@RestController
+@RequestMapping("/api/customer")
+public class CustomerController {
+	@Autowired
+	private CustomerService customerService;
+
+	@Autowired
+	private CustomerPaymentGatewayService customerPaymentGatewayService;
+
+	@Autowired
+	private PaymentGatewayService paymentGatewayService;
+
+	@Autowired
+	ResponseBean responseBean;
+
+	@Autowired
+	AuditLogUtil auditLogUtil;
+
+	@Autowired
+	private HttpServletRequest request;
+
+	@Autowired
+	private Environment environment;
+
+	@Autowired
+	CryptoUtil cryptoUtil;
+
+	@Autowired
+	AppSecCreds appSecCreds;
+
+	@Autowired
+	BookingRepository bookingRepository;
+
+	@Autowired
+	ValidateApiKeyUtil validateApiKeyUtil;
+
+	private ObjectMapper mapper = new ObjectMapper();
+
+	final static Logger logger = Logger.getLogger(CustomerController.class
+			.getName());
+
+	/**
+	 * Description: This method is used to create/update a customer.
+	 * 
+	 * @param customerDTO
+	 * @return
+	 * @throws IOException
+	 * @throws JsonMappingException
+	 * @throws JsonGenerationException
+	 */
+	@RequestMapping(value = { "/create" }, method = RequestMethod.POST)
+	public ResponseBean saveCustomer(
+			@RequestHeader(value = "apk_key", required = true) String apk_key,
+			@RequestBody CustomerDTO customerDTO) throws Exception {
+
+		/* request logging for post */
+		// auditLogUtil.createAuditLog(customerDTO.toString(), request);
+		auditLogUtil.createAuditLog(mapper.writeValueAsString(customerDTO),
+				request);
+
+		/* Authenticating the api_key */
+		if (!validateApiKey(CryptoCode.RIDLRAPP.toString(), apk_key)) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					" UnAthorised Access Identified for apk_key " + apk_key);
+		}
+
+		if (customerDTO.getCustomerNo() == null) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Customer ID not found");
+		} else {
+			Customer customer = customerService.findBycustomerId(Long
+					.valueOf(customerDTO.getCustomerNo()));
+			if (customer == null) {
+				customer = new Customer();
+			}
+			if (customerDTO.getCustomerNo().length() < CustomerProperties.DEFAULT_CUSTOMER_NO_LENGTH
+					.getValue()
+					|| customerDTO.getCustomerNo().length() > CustomerProperties.DEFAULT_CUSTOMER_NO_LENGTH
+							.getValue()) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Invalid Customer No. Length should be : "
+								+ CustomerProperties.DEFAULT_CUSTOMER_NO_LENGTH
+										.getValue());
+			}
+			customer.setCustomerNo(Long.valueOf(customerDTO.getCustomerNo()));
+
+			if (customerDTO.getStatus() != null
+					&& (customerDTO.getStatus().equalsIgnoreCase(
+							Status.ACTIVE.toString()) || customerDTO
+							.getStatus().equalsIgnoreCase(
+									Status.INACTIVE.toString()))) {
+				customer.setStatus(customerDTO.getStatus().toUpperCase());
+			} else {
+				customer.setStatus(Status.ACTIVE.toString());
+			}
+			if (customerDTO.getCustomerName() != null) {
+				customer.setCustomerName(customerDTO.getCustomerName());
+			}
+			if (customerDTO.getCustomerAge() != null
+					&& customerDTO.getCustomerAge() <= 0) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Age Can't be negative or Zero");
+			} else {
+				customer.setAge(customerDTO.getCustomerAge());
+			}
+
+			customer.setEmail(customerDTO.getEmail()); // set emailId
+			customerService.save(customer);
+		}
+		return new ResponseBean(HttpStatus.OK, "SUCCESSFUL");
+	}
+
+	/**
+	 * Description: This method is used to update Auth Token and Exp date of
+	 * customers
+	 * 
+	 * @param customerNo
+	 * @param customerDTO
+	 * @return
+	 * @throws IOException
+	 * @throws JsonMappingException
+	 * @throws JsonGenerationException
+	 */
+
+	@SuppressWarnings("unchecked")
+	@RequestMapping(value = { "/updateAuthToken/{customerNo}" }, method = RequestMethod.POST, produces = "application/json")
+	public ResponseBean createCustomer(
+			@RequestHeader(value = "apk_key", required = true) String apk_key,
+			@PathVariable("customerNo") String customerNo,
+			@RequestBody @Valid CustomerDTO customerDTO, BindingResult result)
+			throws Exception {
+
+		/* request logging for post */
+		auditLogUtil.createAuditLog(mapper.writeValueAsString(customerDTO),
+				request);
+
+		/* Validation for all input types */
+		if (result.hasErrors()) {
+			responseBean.setMessage("Invalid Input");
+			responseBean.setStatus(result.getAllErrors());
+		}
+
+		if (!validateApiKey(CryptoCode.RIDLRAPP.toString(), apk_key)) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					" UnAthorised Access Identified for apk_key " + apk_key);
+		}
+
+		/* Request Validation. */
+		if (result != null && result.hasErrors()) {
+			logger.error("Failure: " + result.getFieldError().getField() + " "
+					+ result.getFieldError().getDefaultMessage());
+
+			return new ResponseBean(HttpStatus.BAD_REQUEST, result
+					.getFieldError().getField()
+					+ " "
+					+ result.getFieldError().getDefaultMessage());
+		}
+
+		/*
+		 * if (customerNo != null) {
+		 * 
+		 * } else { return new ResponseBean(HttpStatus.BAD_REQUEST,
+		 * "Customer No not found"); }
+		 */
+		customerDTO.setCustomerNo(customerNo);
+
+		responseBean = requestValidation(customerDTO);
+		if (responseBean.getStatus().equals(HttpStatus.OK)) {
+			Customer customer = customerService.findBycustomerId(Long
+					.valueOf(customerNo));
+			if (customer == null) {
+				customer = new Customer();
+			}
+
+			CustomerPaymentGateway customerPaymentGateway = customerPaymentGatewayService
+					.findByCustomerNoAndPgCode(Long.valueOf(customerNo),
+							customerDTO.getPgCode());
+
+			if (customerPaymentGateway == null) {
+				customerPaymentGateway = new CustomerPaymentGateway();
+			}
+
+			PaymentGateway paymentGateway = paymentGatewayService
+					.findByPgCode(customerDTO.getPgCode());
+			if (paymentGateway == null) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"Wrong PG Code.");
+			}
+			customerPaymentGateway.setPaymentGateway(paymentGateway);
+
+			customer.setCustomerNo(Long.valueOf(customerNo));
+			if ((Status.ACTIVE.toString().equalsIgnoreCase(customerDTO
+					.getStatus()))
+					|| (Status.INACTIVE.toString().equalsIgnoreCase(customerDTO
+							.getStatus()))) {
+				customer.setStatus(customerDTO.getStatus().toUpperCase());
+				customerPaymentGateway.setStatus(customerDTO.getStatus()
+						.toUpperCase());
+			} else {
+				customer.setStatus(Status.ACTIVE.toString());
+				customerPaymentGateway.setStatus(Status.ACTIVE.toString());
+			}
+			/*
+			 * if (customerDTO.getCustomerName() != null) {
+			 * customer.setCustomerName(customerDTO.getCustomerName()); }
+			 */
+			/*
+			 * if (customerDTO.getCustomerAge() != null) {
+			 * customer.setAge(customerDTO.getCustomerAge()); }
+			 */
+			customer.setCustomerName(customerDTO.getCustomerName());
+			customer.setAge(customerDTO.getCustomerAge());
+			customer.setEmail(customerDTO.getEmail()); // added email in update
+														// case
+			customer.setDeviceId(customerDTO.getDeviceId());
+
+			customerPaymentGateway.setCustomer(customer);
+
+			SimpleDateFormat dateFormat = new SimpleDateFormat(
+					"yyyy-MM-dd HH:mm:ss");
+			java.util.Date authTokenExpDate = null;
+			try {
+				authTokenExpDate = dateFormat.parse(customerDTO
+						.getAuthTokenExpDate());
+			} catch (ParseException e) {
+				return new ResponseBean(HttpStatus.BAD_REQUEST,
+						"AuthtokenExpDate date fromat: yyyy-MM-dd HH:mm:ss");
+			}
+			customerPaymentGateway.setExpiryDate(authTokenExpDate);
+			customerPaymentGateway.setAuthToken(cryptoUtil
+					.encryptString(customerDTO.getAuthToken()));
+			if (customerDTO.getIsDefaultGateway() == 1) {
+				CustomerPaymentGateway customerPaymentGatewayPrev = customerPaymentGatewayService
+						.findByCustomerNoAndIsDefaultPgCode(
+								Long.valueOf(customerNo), 1);
+				if (customerPaymentGatewayPrev != null) {
+					customerPaymentGatewayPrev.setIsDefaultPaymentGateway(0);
+					customerPaymentGatewayService
+							.save(customerPaymentGatewayPrev);
+				}
+			}
+			customerPaymentGateway.setIsDefaultPaymentGateway(customerDTO
+					.getIsDefaultGateway());
+			
+			customerPaymentGatewayService.save(customerPaymentGateway);
+
+			/*
+			 * Building the response as per new request: Need pending
+			 * information of customer in response Currently retrieving info for
+			 * the booking having OPEN or USER_OPEN status.
+			 */
+
+			Specification<Booking> specifications = createFilter(customer,
+					Status.OPEN.toString(), Status.USER_OPEN.toString());
+
+			List<JSONObject> objList = new ArrayList<JSONObject>();
+
+			if (specifications != null) {
+				List<Booking> pendingBookings = bookingRepository
+						.findAll(specifications);
+				logger.info("No of pending bookings for Customer: " +customer.getCustomerNo() +" is: "+ pendingBookings.size());
+
+				for (Booking pendingbookings : pendingBookings) {
+					retrieveBookingTimeStamp(pendingbookings.getBookingNo());
+					JSONObject pendingBookingInfo = new JSONObject();
+					pendingBookingInfo.put("TimeStamp",
+							retrieveBookingTimeStamp(pendingbookings
+									.getBookingNo()));
+					if (pendingbookings.getActual_amount() != null) {
+						pendingBookingInfo.put("Actual_Amount",
+								pendingbookings.getActual_amount());
+					} else {
+						pendingBookingInfo.put("Actual_Amount", 0);
+					}
+					if (pendingbookings.getAdditional_amount() != null) {
+						pendingBookingInfo.put("Additional_Amount",
+								pendingbookings.getAdditional_amount());
+					} else {
+						pendingBookingInfo.put("Additional_Amount", 0);
+					}
+					if (pendingbookings.getDiscount_amount() != null) {
+						pendingBookingInfo.put("Discount_Amount",
+								pendingbookings.getDiscount_amount());
+					} else {
+						pendingBookingInfo.put("Discount_Amount", 0);
+					}
+					pendingBookingInfo.put("Company_No", pendingbookings
+							.getCompany().getCompanyNo());
+					if (BookingType.valueOf(pendingbookings.getBookingType()) != null) {
+						pendingBookingInfo.put("Booking_Type", BookingType
+								.valueOf(pendingbookings.getBookingType())
+								.getValue());
+					} else {
+						pendingBookingInfo.put("Booking_Type", 0);
+					}
+					objList.add(pendingBookingInfo);
+				}
+			}
+			String minimumBalance = environment
+					.getProperty("customer.minimum.balance");
+			if (minimumBalance != null) {
+				JSONObject obj = new JSONObject();
+				obj.put("Min_balance", minimumBalance);
+				obj.put("Pending_Info", objList);
+				return new ResponseBean(obj, "SUCCESSFUL");
+			} else {
+				return new ResponseBean(HttpStatus.OK, "SUCCESSFUL");
+			}
+
+		} else
+			return responseBean;
+	}
+
+	/**
+	 * Description: This method is used for basic validation of input request
+	 * parameters.
+	 * 
+	 * @param customerDTO
+	 * @return ResponseBean
+	 */
+	public ResponseBean requestValidation(CustomerDTO customerDTO) {
+		if (customerDTO.getIsDefaultGateway() != null
+				&& (customerDTO.getIsDefaultGateway() != 1 && customerDTO
+						.getIsDefaultGateway() != 0)) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Correct Default Gateway must be provided. Either One or Zero");
+		}
+		/*
+		 * if (customerDTO.getCustomerAge() != null &&
+		 * customerDTO.getCustomerAge() < 0) { return new
+		 * ResponseBean(HttpStatus.BAD_REQUEST, "Invalid Customer Age"); }
+		 */
+
+		if (customerDTO.getCustomerNo() != null
+				&& (customerDTO.getCustomerNo().length() < CustomerProperties.DEFAULT_CUSTOMER_NO_LENGTH
+						.getValue() || customerDTO.getCustomerNo().length() > CustomerProperties.DEFAULT_CUSTOMER_NO_LENGTH
+						.getValue())) {
+			return new ResponseBean(HttpStatus.BAD_REQUEST,
+					"Invalid Customer No. Length should be : "
+							+ CustomerProperties.DEFAULT_CUSTOMER_NO_LENGTH
+									.getValue());
+		}
+		return new ResponseBean(HttpStatus.OK, "Validation Check successful");
+	}
+
+	public boolean validateApiKey(String appName, String apk_key) {
+		Map<String, AppSecCreds> appSecCredsMap = new ConcurrentHashMap<String, AppSecCreds>();
+
+		appSecCredsMap = validateApiKeyUtil.retrieveAppSecCred(appName);
+
+		if (appSecCreds != null) {
+			if (!apk_key.equalsIgnoreCase(cryptoUtil
+					.decryptString(appSecCredsMap.get(appName).getApiKey()))) {
+				return false;
+			}
+		} else
+			return false;
+
+		return true;
+	}
+
+	public Specification<Booking> createFilter(Customer customer,
+			String... statuses) {
+		return new Specification<Booking>() {
+
+			@Override
+			public Predicate toPredicate(Root<Booking> root,
+					CriteriaQuery<?> query, CriteriaBuilder builder) {
+				Predicate customerpredicate = null;
+				Predicate statusPredicate = null;
+				if (customer != null) {
+					customerpredicate = builder.and(builder.equal(
+							root.get("customer"), customer.getId()));
+				}
+				if (statuses != null) {
+					statusPredicate = builder.or(builder.equal(
+							root.get("status"), statuses[0]));
+					for (String status : statuses) {
+						statusPredicate = builder.or(statusPredicate,
+								builder.equal(root.get("status"), status));
+					}
+				}
+				return builder.and(customerpredicate, statusPredicate);
+			}
+		};
+	}
+
+	public String retrieveBookingTimeStamp(String bookingNo) {
+		String revString = new StringBuffer(bookingNo.substring(7)).reverse()
+				.toString();
+		return revString;
+	}
+
+}

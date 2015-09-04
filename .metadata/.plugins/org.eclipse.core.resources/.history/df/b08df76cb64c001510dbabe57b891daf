@@ -1,0 +1,30 @@
+package com.birdseye.ticketing.core.data.repository;
+
+import java.util.List;
+
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.stereotype.Repository;
+
+import com.birdseye.ticketing.core.data.domain.Booking;
+import com.birdseye.ticketing.core.data.domain.BookingPaymentDetails;
+import com.birdseye.ticketing.core.data.domain.Customer;
+
+@Repository
+public interface BookingRepository extends JpaRepository<Booking, Long>,
+		JpaSpecificationExecutor<Booking> {
+
+	Booking findByBookingNo(String bookingNo);
+
+	Booking findFirstByCustomerIdOrderByCreatedDateDesc(Long customerId);
+
+	List<Booking> findByCompanyId(Long companyId);
+
+	/*@Query(value = "select * from ticket ticket where :filter", nativeQuery = true)
+	List<Ticket> searchTickets(@Param("filter") String filter);
+	*/
+	List<Booking> findAll(Specification<Booking> filter);
+	
+	List<BookingPaymentDetails> findBookingPaymentDetailsByBookingNo(String bookingNo);
+}

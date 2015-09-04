@@ -1,0 +1,12 @@
+spring.datasource.url=jdbc:mysql://localhost:3306/ticketing2
+spring.datasource.username=root
+spring.datasource.password=password123
+spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+spring.jpa.hibernate.ddl-auto = validate
+
+fare.loader.fileType=.csv
+fare.loader.file.delimeter=,
+fare.loader.SourceDirpath=./src/main/resources/inputFiles
+fare.loader.DestDirpath=./src/main/resources/ProcessedFiles
+crypto.conductor.apikey.sec.creds=T!l@N#T$I%%C**A*S)(CR@!T^S
+crypto.ridlr.apikey.sec.creds=A*S)(CR@!T^ST%%C**!l@N#T$I

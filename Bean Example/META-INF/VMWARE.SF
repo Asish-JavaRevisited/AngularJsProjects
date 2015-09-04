@@ -1,0 +1,21 @@
+Signature-Version: 1.0
+SHA-256-Digest-Manifest-Main-Attributes: LZu0XxDqofOxTryq0L46g8y7hDE/D
+ ycRJW76Paz1D5E=
+SHA-256-Digest-Manifest: jyg/NfmRr6szqPT7ny+gkFBkCGmdfUdTOtmnFKRumJ0=
+Created-By: 1.7.0_67 (Oracle Corporation)
+
+Name: src/bean/BoundPoint.aj
+SHA-256-Digest: Dmt85YAAHTXK+dHEW2eWaojoYfKxgy9YKBTOWYChXXc=
+
+Name: .classpath
+SHA-256-Digest: re7SauPBTkv6Se/mvCGavZm/fURdOAukueQqZQ4uvkY=
+
+Name: META-INF/eclipse.inf
+SHA-256-Digest: ak2bzOGDjLurhLXRsFA/N7TRhvaP+YA1QdnivLjcXtk=
+
+Name: src/bean/Demo.java
+SHA-256-Digest: wmZ+Ly1VRnck5ZS6e1EgfsRHjXGIo+g/nbEgXmR6rXI=
+
+Name: src/bean/Point.java
+SHA-256-Digest: vdRd0GPOEcs810B+P05PHTDradLDQ6DgG6kn/wUHu7s=
+

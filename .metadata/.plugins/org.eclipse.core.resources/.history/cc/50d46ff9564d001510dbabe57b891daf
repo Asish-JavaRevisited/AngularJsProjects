@@ -1,0 +1,53 @@
+package com.birdseye.ticketing.api;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.text.SimpleDateFormat;
+import java.util.Scanner;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+
+@Component
+public class test {
+	
+	@Autowired
+	private Environment environment;
+	
+	public static void main(String args[]) throws FileNotFoundException
+	{
+		test t1=new test();
+		
+		String str="AsishKumarSahoo";
+		System.out.println(str.substring(5));
+		System.out.println(str.substring(5,14));
+		
+		System.out.println("Time in millisec "+System.currentTimeMillis());
+		long unixTime = System.currentTimeMillis() / 1000L;
+		
+		System.out.println("Current time is: "+unixTime);
+		
+		
+		java.util.Date time=new java.util.Date((long)unixTime*1000);
+		
+		System.out.println("Current time is: "+time);
+		
+		SimpleDateFormat outputDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		System.out.println("Date in new format is:"+outputDateFormat.format(time));
+		
+	//	t1.Display();
+		
+		String text = new Scanner( new File("D:/Projects/ticketing_backend/api/src/main/resources/email_template.html") ).useDelimiter("\\Z").next();
+		System.out.println("Content is: "+ text);
+	}
+	
+	public void Display()
+	{
+		String filePath = environment.getProperty("notification.email.template");
+		System.out.println("File path is: "+filePath);
+	}
+	
+	
+
+}

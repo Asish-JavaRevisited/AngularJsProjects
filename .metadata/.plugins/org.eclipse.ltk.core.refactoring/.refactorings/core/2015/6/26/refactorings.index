@@ -1,0 +1,16 @@
+1434981595478	Delete elements
+1435240422961	Delete element
+1435240437565	Delete elements
+1435292905759	Copy package
+1435293199243	Rename type 'Traveller'
+1435294052653	Rename type 'TransactionDetails'
+1435296372305	Delete element
+1435297305976	Rename type 'ConductorDutyDetails'
+1435297334110	Rename type 'JourneyDetails'
+1435297598886	Rename type 'JourneyDetailsRepository'
+1435297630357	Rename type 'TransactionDetailsRepository'
+1435297650815	Rename type 'TicketDetailsRepository'
+1435302346993	Rename field 'ticketId'
+1435316373950	Rename compilation unit 'Conductor.java'
+1435325873490	Delete element
+1435326400309	Rename type 'ConductorRepository'
